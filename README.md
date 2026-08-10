@@ -16,11 +16,11 @@
 
 ## Run tests
 ```powershell
-./gradle.bat bootRun
+./gradlew.bat test
 ```
 
 ## Health check
-```powersehll
+```powershell
 curl.exe -i http://localhost:8080/health
 ```
 
