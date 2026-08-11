@@ -31,6 +31,26 @@ Expected response:
 }
 ```
 
+## Local database
+
+Start the database:
+
+```bash
+docker compose up -d
+```
+
+Check its status:
+
+```bash
+docker compose ps
+```
+
+Stop the database:
+
+```bash
+docker compose down
+```
+
 ## Planned capabilities
 
 - 인증과 권한
