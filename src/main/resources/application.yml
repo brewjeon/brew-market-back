@@ -1,6 +1,8 @@
 spring:
   config:
     import: optional:file:.env[.properties]
+  flyway:
+    default-schema: brew_market
 
   datasource:
     url: jdbc:postgresql://localhost:${POSTGRES_PORT:5432}/${POSTGRES_DB}
@@ -10,3 +12,6 @@ spring:
   jpa:
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: brew_market
