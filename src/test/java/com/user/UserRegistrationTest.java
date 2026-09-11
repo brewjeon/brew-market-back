@@ -1,4 +1,4 @@
-package user;
+package com.user;
 
 import com.brewmarket.BrewMarketBackApplication;
 import com.brewmarket.user.User;
