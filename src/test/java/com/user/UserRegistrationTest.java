@@ -53,11 +53,11 @@ class UserRegistrationTest {
     void createsUserAndRejectsDuplicateEmail() throws Exception {
         // Given(준비): 정상적인 사용자 등록 요청
         String body = """
-              {
-                  "email": "learner@example.com",
-                  "nickname": "brewer"
-              }
-              """;
+                {
+                    "email": "learner@example.com",
+                    "nickname": "brewer"
+                }
+                """;
 
         // When(실행) / Then(검증): 등록 요청이 201로 성공한다.
         mockMvc.perform(post("/users")
@@ -77,10 +77,13 @@ class UserRegistrationTest {
 
         // When / Then: 같은 이메일로 재등록하면 409로 거부한다.
         mockMvc.perform(post("/users")
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(body))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.code").value("EMAIL_ALREADY_EXISTS"));
+                .andExpect(jsonPath("$.code").value("EMAIL_ALREADY_EXISTS"))
+                .andExpect(jsonPath("$.message").isNotEmpty())
+                .andExpect(jsonPath("$.fieldErrors").isArray())
+                .andExpect(jsonPath("$.fieldErrors").isEmpty());
 
         // Then: 중복 요청 이후에도 사용자는 한 명이다.
         assertEquals(1L, userRepository.count());
@@ -100,7 +103,13 @@ class UserRegistrationTest {
         mockMvc.perform(post("/users")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body))
-                .andExpect(status().isBadRequest());
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"))
+                .andExpect(jsonPath("$.message").isNotEmpty())
+                .andExpect(jsonPath("$.fieldErrors").isArray())
+                .andExpect(jsonPath("$.fieldErrors.length()").value(1))
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("email"))
+                .andExpect(jsonPath("$.fieldErrors[0].message").isNotEmpty());
 
         // Then: 잘못된 요청은 DB에 저장되지 않는다.
         assertEquals(0L, userRepository.count());

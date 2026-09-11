@@ -30,26 +30,4 @@ public class UserController {
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
-
-    @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<Map<String, String>> handleDataIntegrityViolation(
-            DataIntegrityViolationException exception
-    ) {
-        Throwable cause = exception;
-
-        while (cause != null) {
-            if (cause instanceof ConstraintViolationException violation
-                    && "uk_users_email".equals(violation.getConstraintName())) {
-                return ResponseEntity.status(HttpStatus.CONFLICT)
-                        .body(Map.of(
-                                "code", "EMAIL_ALREADY_EXISTS",
-                                "message", "이미 등록된 이메일입니다."
-                        ));
-            }
-
-            cause = cause.getCause();
-        }
-
-        throw exception;
-    }
 }
