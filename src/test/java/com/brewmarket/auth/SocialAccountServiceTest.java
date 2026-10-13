@@ -59,6 +59,7 @@ class SocialAccountServiceTest {
                 );
     }
 
+    @Test
     void returnsEmptyWhenAccountDoesNotExist() {
         // 준비: 연결 정보가 없는 상황 설정
         when(socialAccountRepository.findByProviderAndProviderSubject(
