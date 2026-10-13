@@ -2,11 +2,13 @@ package com.brewmarket.config;
 
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
@@ -14,7 +16,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(
-            HttpSecurity http
+            HttpSecurity http,
+            ObjectProvider<ClientRegistrationRepository> clientRegistrations
     ) throws Exception {
 
         http
@@ -61,6 +64,23 @@ public class SecurityConfig {
                         )
                 );
 
+        // 외부 로그인 설정이 등록되어 있는지 확인
+        // 설정이 없는 기존 테스트에서는 null 반환
+        ClientRegistrationRepository registrations = clientRegistrations.getIfAvailable();
+
+        // 설정이 있는 환경에서만 외부 로그인 기능 활성화
+        if (registrations != null) {
+            http.oauth2Login(oauth2 -> oauth2
+                    // 위에서 확인한 클라이언트 설정 저장소 사용
+                    .clientRegistrationRepository(registrations)
+                    
+                    // 인증 성공 후에는 임시로 상태 확인 주소로 이동
+                    // true: 이전에 접근했던 주소 대신 항상 이 주소 사용
+                    .defaultSuccessUrl("/health", true)
+                    
+            );
+        }
+        
         // 위에서 정의한 규칙으로 보안 필터 묶음을 생성
         return http.build();
     }
