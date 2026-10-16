@@ -1,10 +1,12 @@
 package com.brewmarket.config;
 
+import com.brewmarket.auth.GoogleOidcUserService;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -17,7 +19,8 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http,
-            ObjectProvider<ClientRegistrationRepository> clientRegistrations
+            ObjectProvider<ClientRegistrationRepository> clientRegistrations,
+            ObjectProvider<GoogleOidcUserService> googleUserServices
     ) throws Exception {
 
         http
@@ -34,6 +37,8 @@ public class SecurityConfig {
                         // 게시글 등록은 인증된 사용자만 허용
                         // 컨트롤러 작성 전에 접근 규칙부터 정의
                         .requestMatchers(HttpMethod.POST, "/posts").authenticated()
+
+                        .requestMatchers(HttpMethod.GET, "/auth/me").authenticated()
 
                         // 명시하지 않은 요청은 기본 거부
                         // 새로운 기능을 열 때 접근 규칙도 함께 검토
@@ -68,19 +73,28 @@ public class SecurityConfig {
         // 설정이 없는 기존 테스트에서는 null 반환
         ClientRegistrationRepository registrations = clientRegistrations.getIfAvailable();
 
-        // 설정이 있는 환경에서만 외부 로그인 기능 활성화
+        // 구글 설정이 있는 환경에서 로그인 기능 활성화
         if (registrations != null) {
             http.oauth2Login(oauth2 -> oauth2
-                    // 위에서 확인한 클라이언트 설정 저장소 사용
+                    // 기존 구글 클라이언트 설정 사용
                     .clientRegistrationRepository(registrations)
-                    
-                    // 인증 성공 후에는 임시로 상태 확인 주소로 이동
-                    // true: 이전에 접근했던 주소 대신 항상 이 주소 사용
+
+                    // 구글 사용자 정보 처리에 우리 서비스를 연결
+                    .userInfoEndpoint(userInfo -> userInfo.oidcUserService(googleUserServices.getIfAvailable()))
+
+                    // 로그인 성공 후 서버 상태 대신 내 회원 번호 확인
                     .defaultSuccessUrl("/health", true)
-                    
+
+                    // 로그인 실패 시 내부 오류 내용은 노출하지 않고 401 발생
+                    .failureHandler((request, response, exception) ->
+                            response.setStatus(
+                                    HttpServletResponse.SC_UNAUTHORIZED
+                            )
+                    )
+
             );
         }
-        
+
         // 위에서 정의한 규칙으로 보안 필터 묶음을 생성
         return http.build();
     }
