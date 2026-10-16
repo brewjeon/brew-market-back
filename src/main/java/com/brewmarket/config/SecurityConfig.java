@@ -28,16 +28,18 @@ public class SecurityConfig {
                         // 서버 내부의 오류 응답 처리가 보안 검사에 다시 막히지 않도록 허용
                         // 외부에서 /error로 직접 요청하는 것과는 다른 조건
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+
                         // 상태 확인은 로그인 없이 허용
                         .requestMatchers(HttpMethod.GET, "/health").permitAll()
+
                         // 기존 회원 등록 기능 유지
                         // 이메일 소유권 확인이나 구글 로그인 완료를 의미하지는 않음
                         .requestMatchers(HttpMethod.POST, "/users").permitAll()
 
                         // 게시글 등록은 인증된 사용자만 허용
-                        // 컨트롤러 작성 전에 접근 규칙부터 정의
                         .requestMatchers(HttpMethod.POST, "/posts").authenticated()
 
+                        // 내 회원 번호도 인증된 사용자만 조회 가능
                         .requestMatchers(HttpMethod.GET, "/auth/me").authenticated()
 
                         // 명시하지 않은 요청은 기본 거부
