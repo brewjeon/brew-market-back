@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>브루마켓 로그아웃 확인</title>
+</head>
+<body>
+<h1>브루마켓 로그인 상태 확인</h1>
+
+<p>
+    <a href="/oauth2/authorization/google">구글 로그인</a>
+    <a href="/auth/me">내 로그인 정보 확인</a>
+</p>
+
+<button id="logoutButton" type="button">로그아웃</button>
+<p id="result" role="status"></p>
+
+<script>
+    // 버튼과 결과 안내 영역을 찾아 참조 보관
+    const logoutButton = document.getElementById("logoutButton");
+    const result = document.getElementById("result");
+
+    logoutButton.addEventListener("click", async () => {
+        // 요청이 끝나기 전에는 중복 클릭 방지
+        logoutButton.disabled = true;
+        result.textContent = "로그아웃 요청 중입니다.";
+
+        try {
+            // 현재 로그인 세션에서 사용할 CSRF 토큰 조회
+            const csrfResponse = await fetch("/auth/csrf", {
+                credentials: "same-origin",
+                cache: "no-store"
+            });
+
+            if (csrfResponse.status === 401) {
+                result.textContent = "먼저 로그인한 뒤 다시 시도해 주세요.";
+                return;
+            }
+
+            if (!csrfResponse.ok) {
+                result.textContent =
+                    `CSRF 토큰 조회 실패: ${csrfResponse.status}`;
+                return;
+            }
+
+            const csrf = await csrfResponse.json();
+
+            // 서버가 알려준 헤더 이름에 토큰을 담아 로그아웃 요청
+            const logoutResponse = await fetch("/logout", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                    [csrf.headerName]: csrf.token
+                }
+            });
+
+            if (logoutResponse.status !== 204) {
+                result.textContent =
+                    `로그아웃 요청 실패: ${logoutResponse.status}`;
+                return;
+            }
+
+            // 로그아웃 후 보호된 경로에 다시 접근해서 인증 해제 확인
+            const meResponse = await fetch("/auth/me", {
+                credentials: "same-origin",
+                cache: "no-store"
+            });
+
+            if (meResponse.status === 401) {
+                result.textContent =
+                    "로그아웃 완료: 204 / 회원 정보 접근 거부: 401";
+            } else {
+                result.textContent =
+                    `로그아웃 응답은 204이지만 인증 해제 확인 필요: ${meResponse.status}`;
+            }
+        } catch (error) {
+            // 서버 중단이나 연결 문제 등으로 응답을 받지 못한 상황
+            result.textContent =
+                "서버에 연결하지 못했습니다. 실행 상태를 확인해 주세요.";
+        } finally {
+            // 성공·실패·중간 반환 모두 버튼을 다시 사용할 수 있게 처리
+            logoutButton.disabled = false;
+        }
+    });
+</script>
+</body>
+</html>

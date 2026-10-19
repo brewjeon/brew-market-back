@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.response.SecurityMockMvcResultMatchers.unauthenticated;
 
 // 필요한 웹 계층을 중심으로 테스트 환경 구성
 @WebMvcTest(SecurityConfigTest.TestPostController.class)
@@ -61,5 +62,25 @@ class SecurityConfigTest {
         mockMvc.perform(post("/posts")
                         .with(csrf()))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    @WithMockUser
+    void logsOutWithValidCsrfToken() throws Exception {
+        // 인증 정보와 정상 CSRF 토큰을 포함해 로그아웃 요청
+        mockMvc.perform(post("/logout")
+                        .with(csrf()))
+                // 본문 없이 정상 처리
+                .andExpect(status().isNoContent())
+                // 요청 처리 후 인증 정보가 제거되었는지 확인
+                .andExpect(unauthenticated());
+    }
+
+    @Test
+    @WithMockUser
+    void rejectsLogoutWithoutCsrfToken() throws Exception {
+        // 로그인되어 있어도 CSRF 토큰이 없으면 요청 거부
+        mockMvc.perform(post("/logout"))
+                .andExpect(status().isForbidden());
     }
 }
