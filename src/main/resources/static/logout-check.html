@@ -15,6 +15,14 @@
 <button id="logoutButton" type="button">로그아웃</button>
 <p id="result" role="status"></p>
 
+<hr>
+
+<h2>게시글 등록 확인</h2>
+<button id="createPostButton" type="button">
+    예시 게시글 1건 등록
+</button>
+<p id="postResult" role="status"></p>
+
 <script>
     // 버튼과 결과 안내 영역을 찾아 참조 보관
     const logoutButton = document.getElementById("logoutButton");
@@ -80,6 +88,62 @@
         } finally {
             // 성공·실패·중간 반환 모두 버튼을 다시 사용할 수 있게 처리
             logoutButton.disabled = false;
+        }
+    });
+
+    const createPostButton = document.getElementById("createPostButton");
+    const postResult = document.getElementById("postResult");
+
+    createPostButton.addEventListener("click", async () => {
+        // 요청 중 중복 클릭 방지
+        createPostButton.disabled = true;
+        postResult.textContent = "등록 요청 중입니다.";
+
+        try {
+            // 로그인 세션에서 사용할 CSRF 토큰 조회
+            const csrfResponse = await fetch("/auth/csrf", {
+                credentials: "same-origin",
+                cache: "no-store"
+            });
+
+            if (!csrfResponse.ok) {
+                postResult.textContent =
+                    `토큰 조회 실패: ${csrfResponse.status}. 로그인 상태를 확인해 주세요.`;
+                return;
+            }
+
+            const csrf = await csrfResponse.json();
+
+            // 판매자 번호는 보내지 않고 게시글 내용만 전달
+            const response = await fetch("/posts", {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                    "Content-Type": "application/json",
+                    [csrf.headerName]: csrf.token
+                },
+                body: JSON.stringify({
+                    title: "브루마켓 등록 확인용 머그컵",
+                    description: "로그인한 회원의 게시글 저장 확인용입니다.",
+                    price: 3000
+                })
+            });
+
+            if (response.status !== 201) {
+                postResult.textContent = `등록 실패: ${response.status}`;
+                return;
+            }
+
+            const createdPost = await response.json();
+
+            postResult.textContent =
+                `등록 완료: 201 / 게시글 번호: ${createdPost.id}`;
+        } catch (error) {
+            postResult.textContent =
+                "요청 처리 중 오류가 발생했습니다. 서버와 브라우저 오류를 확인해 주세요.";
+        } finally {
+            // 성공하거나 실패해도 버튼 다시 활성화
+            createPostButton.disabled = false;
         }
     });
 </script>
