@@ -42,20 +42,8 @@ class PostControllerTest {
 
     @Test
     void createsPostUsingAuthenticatedUserId() throws Exception {
-        // 실제 구글 토큰이 아닌 테스트용 인증 정보
-        OidcIdToken idToken = OidcIdToken.withTokenValue("test-id-token")
-                .claim("sub", "test-google-account")
-                .build();
-
-        // 기본 외부 로그인 사용자 정보 구성
-        DefaultOidcUser oidcUser = new DefaultOidcUser(
-                AuthorityUtils.createAuthorityList("ROLE_USER"),
-                idToken
-        );
-
         // 공통 준비 메서드로 회원 번호 42인 로그인 사용자 생성
         BrewOidcUser user = authenticatedUser(42L);
-
 
         // 지정한 값으로 서비스가 호출되면 게시글 번호 101을 반환
         when(postService.create(
