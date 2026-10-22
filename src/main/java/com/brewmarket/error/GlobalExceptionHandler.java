@@ -1,11 +1,10 @@
 package com.brewmarket.error;
 
-import com.sun.net.httpserver.HttpsServer;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.http.ResponseEntity;
-import org.hibernate.exception.ConstraintViolationException;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -44,7 +43,7 @@ public class GlobalExceptionHandler {
 
         while (cause != null) {
             if (cause instanceof ConstraintViolationException violation &&
-            "uk_users_email". equals(violation.getConstraintName())) {
+            "uk_users_email".equals(violation.getConstraintName())) {
                 ErrorResponse response = new ErrorResponse(
                         "EMAIL_ALREADY_EXISTS",
                         "이미 등록된 이메일입니다.",
