@@ -31,9 +31,11 @@ public class SecurityConfig {
                         // 상태 확인은 로그인 없이 허용
                         .requestMatchers(HttpMethod.GET, "/health").permitAll()
 
-                        // 기존 회원 등록 기능 유지
-                        // 이메일 소유권 확인이나 구글 로그인 완료를 의미하지는 않음
-                        .requestMatchers(HttpMethod.POST, "/users").permitAll()
+                        // 이메일 소유 확인 없는 직접 가입은 로그인 여부와 관계없이 차단
+                        .requestMatchers(HttpMethod.POST, "/users").denyAll()
+
+                        // 게시글 목록은 로그인 없이 조회 가능
+                        .requestMatchers(HttpMethod.GET, "/posts").permitAll()
 
                         // 게시글 등록은 인증된 사용자만 허용
                         .requestMatchers(HttpMethod.POST, "/posts").authenticated()
