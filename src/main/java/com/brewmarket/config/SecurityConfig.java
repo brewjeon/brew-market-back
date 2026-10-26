@@ -34,9 +34,6 @@ public class SecurityConfig {
                         // 이메일 소유 확인 없는 직접 가입은 로그인 여부와 관계없이 차단
                         .requestMatchers(HttpMethod.POST, "/users").denyAll()
 
-                        // 게시글 목록은 로그인 없이 조회 가능
-                        .requestMatchers(HttpMethod.GET, "/posts").permitAll()
-
                         // 게시글 등록은 인증된 사용자만 허용
                         .requestMatchers(HttpMethod.POST, "/posts").authenticated()
 
