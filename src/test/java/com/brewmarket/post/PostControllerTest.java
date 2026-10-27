@@ -2,6 +2,7 @@ package com.brewmarket.post;
 
 import com.brewmarket.auth.AuthenticatedUser;
 import com.brewmarket.auth.BrewOidcUser;
+import com.brewmarket.error.GlobalExceptionHandler;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -14,12 +15,15 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import com.brewmarket.config.SecurityConfig;
 
+import java.time.Instant;
+
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.oidcLogin;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -28,7 +32,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 // 컨트롤러와 우리 보안 설정을 명시적으로 사용
 @ContextConfiguration(classes = {
         PostController.class,
-        SecurityConfig.class
+        SecurityConfig.class,
+        GlobalExceptionHandler.class
 })
 class PostControllerTest {
 
@@ -39,6 +44,43 @@ class PostControllerTest {
     // 실제 저장 대신 호출 내용과 반환값을 제어할 서비스 대역
     @MockitoBean
     private PostService postService;
+
+    @Test
+    void returnsPostDetailWithoutAuthentication() throws Exception {
+        // 서비스 대역으로 응답을 준비하고, 로그인 없이 상세 조회 요청
+        when(postService.findDetail(101L)).thenReturn(new PostDetailResponse(
+                101L, "머그컵", "사용하지 않는 컵입니다.", 3000L,
+                PostStatus.FOR_SALE, Instant.parse("2026-01-01T00:00:00Z")
+        ));
+
+        mockMvc.perform(get("/posts/101"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(101))
+                .andExpect(jsonPath("$.title").value("머그컵"))
+                .andExpect(jsonPath("$.description").value("사용하지 않는 컵입니다."))
+                .andExpect(jsonPath("$.price").value(3000))
+                .andExpect(jsonPath("$.status").value("FOR_SALE"))
+                .andExpect(jsonPath("$.createdAt").value("2026-01-01T00:00:00Z"))
+                .andExpect(jsonPath("$.sellerId").doesNotExist())
+                .andExpect(jsonPath("$.email").doesNotExist());
+
+        verify(postService).findDetail(101L);
+    }
+
+    @Test
+    void returnsNotFoundWhenPostDoesNotExist() throws Exception {
+        // 서비스 예외가 공통 처리기를 거쳐 404와 오류 본문으로 바뀌는지 확인
+        when(postService.findDetail(999999L)).thenThrow(new PostNotFoundException());
+
+        mockMvc.perform(get("/posts/999999"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("POST_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("게시글을 찾을 수 없습니다."))
+                .andExpect(jsonPath("$.fieldErrors").isArray())
+                .andExpect(jsonPath("$.fieldErrors").isEmpty());
+
+        verify(postService).findDetail(999999L);
+    }
 
     @Test
     void createsPostUsingAuthenticatedUserId() throws Exception {

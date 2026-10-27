@@ -57,6 +57,37 @@ class PostServiceTest {
     private EntityManager entityManager;
 
     @Test
+    void returnsDetailForExistingPost() {
+        User seller = userRepository.saveAndFlush(
+                new User("detail@example.com", "상세판매자")
+        );
+        Post saved = postRepository.saveAndFlush(
+                new Post(seller.getId(), "머그컵", "사용하지 않는 컵입니다.", 3000L)
+        );
+        Long postId = saved.getId();
+        // 메모리에 남은 객체가 아니라 DB에 저장된 정보와 생성 시각을 조회
+        entityManager.clear();
+
+        PostDetailResponse response = postService.findDetail(postId);
+
+        assertEquals(postId, response.id());
+        assertEquals("머그컵", response.title());
+        assertEquals("사용하지 않는 컵입니다.", response.description());
+        assertEquals(Long.valueOf(3000L), response.price());
+        assertEquals(PostStatus.FOR_SALE, response.status());
+        assertNotNull(response.createdAt());
+        assertEquals(postRepository.findById(postId).orElseThrow().getCreatedAt(), response.createdAt());
+    }
+
+    @Test
+    void throwsPostNotFoundWhenPostDoesNotExist() {
+        Long missingPostId = 999999L;
+        assertFalse(postRepository.existsById(missingPostId));
+
+        assertThrows(PostNotFoundException.class, () -> postService.findDetail(missingPostId));
+    }
+
+    @Test
     void createsPostForExistingSeller() {
         // 준비: 실제로 존재하는 판매자를 만듭니다.
         User seller = userRepository.saveAndFlush(

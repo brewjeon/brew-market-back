@@ -35,8 +35,8 @@ public class SecurityConfig {
                         // 이메일 소유권 확인이나 구글 로그인 완료를 의미하지는 않음
                         .requestMatchers(HttpMethod.POST, "/users").permitAll()
 
-                        // 게시글 목록은 로그인 없이 조회 가능
-                        .requestMatchers(HttpMethod.GET, "/posts").permitAll()
+                        // 게시글 목록과 단건 상세는 로그인 없이 조회 가능
+                        .requestMatchers(HttpMethod.GET, "/posts", "/posts/{postId}").permitAll()
 
                         // 게시글 등록은 인증된 사용자만 허용
                         .requestMatchers(HttpMethod.POST, "/posts").authenticated()
