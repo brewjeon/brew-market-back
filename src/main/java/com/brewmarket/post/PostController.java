@@ -6,11 +6,14 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
 
 // 게시글 관련 웹 요청을 받고 데이터를 응답
 @RestController
@@ -18,8 +21,14 @@ import org.springframework.web.server.ResponseStatusException;
 @RequiredArgsConstructor
 public class PostController {
 
-    // 게시글 등록에 사용할 서비스 객체의 참조 보관
+    // 게시글 조회와 등록에 사용할 서비스 객체의 참조 보관
     private final PostService postService;
+
+    // GET /posts 요청에는 최신 게시글 목록을 반환
+    @GetMapping
+    public List<PostSummaryResponse> findLatest() {
+        return postService.findLatest();
+    }
 
     // POST /posts 요청을 게시글 등록 처리와 연결
     @PostMapping
