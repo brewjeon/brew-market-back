@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -28,6 +29,12 @@ public class PostController {
     @GetMapping
     public List<PostSummaryResponse> findLatest() {
         return postService.findLatest();
+    }
+
+    // 주소에 들어온 게시글 번호로 상세 정보 한 건 조회
+    @GetMapping("/{postId}")
+    public PostDetailResponse findDetail(@PathVariable("postId") Long postId) {
+        return postService.findDetail(postId);
     }
 
     // POST /posts 요청을 게시글 등록 처리와 연결

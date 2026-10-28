@@ -14,6 +14,15 @@ public class PostService {
     private final UserRepository userRepository;
     private final PostRepository postRepository;
 
+    @Transactional(readOnly = true)
+    public PostDetailResponse findDetail(Long postId) {
+        // 저장소의 기본 단건 조회 사용. 해당 게시글이 없으면 예외로 중단
+        Post post = postRepository.findById(postId)
+                .orElseThrow(PostNotFoundException::new);
+
+        return PostDetailResponse.from(post);
+    }
+
     // 조회한 엔티티를 그대로 노출하지 않고 공개할 목록 정보로 변환
     @Transactional(readOnly = true)
     public List<PostSummaryResponse> findLatest() {
