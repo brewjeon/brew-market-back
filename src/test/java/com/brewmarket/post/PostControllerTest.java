@@ -20,10 +20,12 @@ import java.time.Instant;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.oidcLogin;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -44,6 +46,36 @@ class PostControllerTest {
     // 실제 저장 대신 호출 내용과 반환값을 제어할 서비스 대역
     @MockitoBean
     private PostService postService;
+
+    @Test
+    void updatesPostUsingAuthenticatedUserId() throws Exception {
+        mockMvc.perform(patch("/posts/101")
+                        .with(oidcLogin().oidcUser(authenticatedUser(42L)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"새 제목","description":"새 설명","price":0}
+                                """))
+                .andExpect(status().isNoContent());
+        verify(postService).update(101L, 42L, "새 제목", "새 설명", 0L);
+    }
+
+    @Test
+    void returnsForbiddenWhenUpdateServiceRejectsOwnership() throws Exception {
+        doThrow(new PostAccessDeniedException()).when(postService)
+                .update(101L, 42L, "새 제목", "새 설명", 0L);
+
+        mockMvc.perform(patch("/posts/101")
+                        .with(oidcLogin().oidcUser(authenticatedUser(42L)))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"title":"새 제목","description":"새 설명","price":0}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("POST_ACCESS_DENIED"))
+                .andExpect(jsonPath("$.fieldErrors").isEmpty());
+    }
 
     @Test
     void returnsPostDetailWithoutAuthentication() throws Exception {

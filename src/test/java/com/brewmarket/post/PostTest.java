@@ -10,6 +10,18 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class PostTest {
 
     @Test
+    void invalidUpdateDoesNotPartiallyChangeContent() {
+        Post post = new Post(1L, "원래 제목", "원래 설명", 3000L);
+
+        assertThrows(IllegalArgumentException.class,
+                () -> post.updateContent("새 제목", "새 설명", -1L));
+
+        assertEquals("원래 제목", post.getTitle());
+        assertEquals("원래 설명", post.getDescription());
+        assertEquals(3000L, post.getPrice());
+    }
+
+    @Test
     void rejectsNegativePrice() {
         // 준비: 판매자 ID·제목·설명은 유효한 값입니다.
         // 실행: 가격만 음수로 넣어 객체 생성을 시도합니다.

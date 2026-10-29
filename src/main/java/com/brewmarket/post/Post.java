@@ -49,6 +49,23 @@ public class Post {
             throw new IllegalArgumentException("판매자 ID는 양수여야 합니다.");
         }
 
+        validateContent(title, description, price);
+        this.sellerId = sellerId;
+        this.title = title;
+        this.description = description;
+        this.price = price;
+        this.status = PostStatus.FOR_SALE;
+    }
+
+    public void updateContent(String title, String description, Long price) {
+        // 모든 값을 검증한 뒤 변경해 잘못된 입력으로 일부 필드만 바뀌지 않게 합니다.
+        validateContent(title, description, price);
+        this.title = title;
+        this.description = description;
+        this.price = price;
+    }
+
+    private static void validateContent(String title, String description, Long price) {
         if (title == null || title.isBlank() || title.length() > 100) {
             throw new IllegalArgumentException("제목은 공백이 아닌 100자 이하여야 합니다.");
         }
@@ -60,12 +77,6 @@ public class Post {
         if (price == null || price < 0) {
             throw new IllegalArgumentException("가격은 0 이상이어야 합니다.");
         }
-
-        this.sellerId = sellerId;
-        this.title = title;
-        this.description = description;
-        this.price = price;
-        this.status = PostStatus.FOR_SALE;
     }
 
     public Long getId() {

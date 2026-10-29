@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,6 +25,21 @@ public class PostController {
 
     // 게시글 조회와 등록에 사용할 서비스 객체의 참조 보관
     private final PostService postService;
+
+    @PatchMapping("/{postId}")
+    public ResponseEntity<Void> update(
+            @PathVariable("postId") Long postId,
+            @AuthenticationPrincipal BrewOidcUser user,
+            @Valid @RequestBody UpdatePostRequest request
+    ) {
+        if (user == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        }
+
+        postService.update(postId, user.getUserId(),
+                request.title(), request.description(), request.price());
+        return ResponseEntity.noContent().build();
+    }
 
     // GET /posts 요청에는 최신 게시글 목록을 반환
     @GetMapping
