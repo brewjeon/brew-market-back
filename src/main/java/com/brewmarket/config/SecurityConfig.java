@@ -43,6 +43,7 @@ public class SecurityConfig {
 
                         // 수정은 로그인한 사용자만 진입하며 작성자 여부는 서비스에서 확인
                         .requestMatchers(HttpMethod.PATCH, "/posts/{postId}").authenticated()
+                        .requestMatchers(HttpMethod.DELETE, "/posts/{postId}").authenticated()
 
                         // 회원 정보와 CSRF 토큰은 로그인한 사용자만 조회
                         .requestMatchers(HttpMethod.GET, "/auth/me", "/auth/csrf")

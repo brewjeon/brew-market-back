@@ -4,6 +4,7 @@ import com.brewmarket.post.PostNotFoundException;
 import com.brewmarket.post.PostAccessDeniedException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -14,6 +15,13 @@ import java.util.List;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ErrorResponse> handleConcurrentChange(ObjectOptimisticLockingFailureException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("CONCURRENT_MODIFICATION",
+                        "다른 요청으로 데이터가 변경되었습니다. 다시 조회해 주세요.", List.of()));
+    }
 
     @ExceptionHandler(PostAccessDeniedException.class)
     public ResponseEntity<ErrorResponse> handlePostAccessDenied(PostAccessDeniedException exception) {
