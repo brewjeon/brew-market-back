@@ -1,6 +1,7 @@
 package com.brewmarket.error;
 
 import com.brewmarket.post.PostNotFoundException;
+import com.brewmarket.post.PostAccessDeniedException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -13,6 +14,12 @@ import java.util.List;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(PostAccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handlePostAccessDenied(PostAccessDeniedException exception) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                .body(new ErrorResponse("POST_ACCESS_DENIED", exception.getMessage(), List.of()));
+    }
 
     // 게시글이 없으면 기존 오류 응답 형식으로 404 반환
     @ExceptionHandler(PostNotFoundException.class)

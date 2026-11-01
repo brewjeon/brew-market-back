@@ -41,6 +41,9 @@ public class SecurityConfig {
                         // 게시글 등록은 인증된 사용자만 허용
                         .requestMatchers(HttpMethod.POST, "/posts").authenticated()
 
+                        // 수정은 로그인한 사용자만 진입하며 작성자 여부는 서비스에서 확인
+                        .requestMatchers(HttpMethod.PATCH, "/posts/{postId}").authenticated()
+
                         // 회원 정보와 CSRF 토큰은 로그인한 사용자만 조회
                         .requestMatchers(HttpMethod.GET, "/auth/me", "/auth/csrf")
                         .authenticated()

@@ -14,6 +14,19 @@ public class PostService {
     private final UserRepository userRepository;
     private final PostRepository postRepository;
 
+    @Transactional
+    public void update(Long postId, Long userId, String title, String description, Long price) {
+        Post post = postRepository.findById(postId)
+                .orElseThrow(PostNotFoundException::new);
+
+        if (!post.getSellerId().equals(userId)) {
+            throw new PostAccessDeniedException();
+        }
+
+        // 조회한 엔티티의 변경은 트랜잭션이 커밋될 때 DB에 반영됩니다.
+        post.updateContent(title, description, price);
+    }
+
     @Transactional(readOnly = true)
     public PostDetailResponse findDetail(Long postId) {
         // 저장소의 기본 단건 조회 사용. 해당 게시글이 없으면 예외로 중단
