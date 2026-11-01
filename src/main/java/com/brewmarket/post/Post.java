@@ -36,6 +36,24 @@ public class Post {
     )
     private Instant createdAt;
 
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    // 동시에 읽은 예전 게시글로 수정·삭제 상태를 덮어쓰지 못하게 합니다.
+    @Version
+    @Column(nullable = false)
+    private Long version;
+
+    public void delete() {
+        if (deletedAt == null) {
+            deletedAt = Instant.now();
+        }
+    }
+
+    public Instant getDeletedAt() {
+        return deletedAt;
+    }
+
     protected Post() {
     }
 
@@ -58,6 +76,9 @@ public class Post {
     }
 
     public void updateContent(String title, String description, Long price) {
+        if (deletedAt != null) {
+            throw new PostNotFoundException();
+        }
         // 모든 값을 검증한 뒤 변경해 잘못된 입력으로 일부 필드만 바뀌지 않게 합니다.
         validateContent(title, description, price);
         this.title = title;

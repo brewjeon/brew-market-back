@@ -15,9 +15,22 @@ public class PostService {
     private final PostRepository postRepository;
 
     @Transactional
-    public void update(Long postId, Long userId, String title, String description, Long price) {
-        Post post = postRepository.findById(postId)
+    public void delete(Long postId, Long userId) {
+        Post post = findActivePost(postId);
+        if (!post.getSellerId().equals(userId)) {
+            throw new PostAccessDeniedException();
+        }
+        post.delete();
+    }
+
+    private Post findActivePost(Long postId) {
+        return postRepository.findByIdAndDeletedAtIsNull(postId)
                 .orElseThrow(PostNotFoundException::new);
+    }
+
+    @Transactional
+    public void update(Long postId, Long userId, String title, String description, Long price) {
+        Post post = findActivePost(postId);
 
         if (!post.getSellerId().equals(userId)) {
             throw new PostAccessDeniedException();
@@ -30,8 +43,7 @@ public class PostService {
     @Transactional(readOnly = true)
     public PostDetailResponse findDetail(Long postId) {
         // 저장소의 기본 단건 조회 사용. 해당 게시글이 없으면 예외로 중단
-        Post post = postRepository.findById(postId)
-                .orElseThrow(PostNotFoundException::new);
+        Post post = findActivePost(postId);
 
         return PostDetailResponse.from(post);
     }
@@ -39,7 +51,7 @@ public class PostService {
     // 조회한 엔티티를 그대로 노출하지 않고 공개할 목록 정보로 변환
     @Transactional(readOnly = true)
     public List<PostSummaryResponse> findLatest() {
-        return postRepository.findTop20ByOrderByCreatedAtDescIdDesc()
+        return postRepository.findTop20ByDeletedAtIsNullOrderByCreatedAtDescIdDesc()
                 .stream()
                 .map(PostSummaryResponse::from)
                 .toList();

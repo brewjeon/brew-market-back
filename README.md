@@ -63,8 +63,11 @@ DB를 중지할 때는 `docker compose down`을 실행합니다. 데이터는 na
 | GET | `/health` | 서버 상태 확인 | `200`, `{"status":"UP"}` |
 | POST | `/users` | 이메일·닉네임 등록 | `201`, `id`·`email`·`nickname` |
 | PATCH | `/posts/{postId}` | 작성자 본인의 제목·본문·가격 수정 | `204`, 응답 본문 없음 |
+| DELETE | `/posts/{postId}` | 작성자 본인의 게시글 삭제 표시 | `204`, 응답 본문 없음 |
 
 게시글 수정에는 로그인 세션과 CSRF 토큰이 필요합니다. 요청·오류 응답·검증 범위는 [게시글 수정 API](docs/post-update.md)를 참고하세요.
+
+삭제도 로그인 세션과 CSRF 토큰이 필요하며 DB 행은 보존합니다. 삭제된 글은 목록에서 제외하고 상세 조회·수정은 404로 처리합니다. [게시글 삭제 API](docs/post-delete.md)를 참고하세요.
 
 ### 상태 확인
 

@@ -1,0 +1,3 @@
+ALTER TABLE brew_market.posts
+    ADD COLUMN deleted_at TIMESTAMPTZ,
+    ADD COLUMN version BIGINT NOT NULL DEFAULT 0;
