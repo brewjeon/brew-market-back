@@ -68,7 +68,11 @@ class PostServiceTest {
         // 메모리에 남은 객체가 아니라 DB에 저장된 정보와 생성 시각을 조회
         entityManager.clear();
 
-        PostDetailResponse response = postService.findDetail(postId);
+        PostDetailResponse response = postService.findDetail(postId, null);
+        assertFalse(response.canManage());
+        assertEquals(true, postService.findDetail(postId, seller.getId()).canManage());
+        User other = userRepository.saveAndFlush(new User("detail-other@example.com", "다른회원"));
+        assertFalse(postService.findDetail(postId, other.getId()).canManage());
 
         assertEquals(postId, response.id());
         assertEquals("머그컵", response.title());
@@ -84,7 +88,7 @@ class PostServiceTest {
         Long missingPostId = 999999L;
         assertFalse(postRepository.existsById(missingPostId));
 
-        assertThrows(PostNotFoundException.class, () -> postService.findDetail(missingPostId));
+        assertThrows(PostNotFoundException.class, () -> postService.findDetail(missingPostId, null));
     }
 
     @Test

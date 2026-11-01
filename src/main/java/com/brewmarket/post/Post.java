@@ -44,6 +44,15 @@ public class Post {
     @Column(nullable = false)
     private Long version;
 
+    public void changeStatus(PostStatus nextStatus) {
+        if (deletedAt != null) throw new PostNotFoundException();
+        if (nextStatus == null) throw new IllegalArgumentException("거래 상태는 필수입니다.");
+        // 같은 상태로 재요청하면 변경 없이 성공한다.
+        if (status == nextStatus) return;
+        if (status == PostStatus.COMPLETED) throw new PostStatusConflictException();
+        status = nextStatus;
+    }
+
     public void delete() {
         if (deletedAt == null) {
             deletedAt = Instant.now();

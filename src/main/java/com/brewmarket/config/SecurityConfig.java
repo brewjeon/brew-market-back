@@ -4,6 +4,7 @@ import com.brewmarket.auth.GoogleOidcUserService;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -14,6 +15,9 @@ import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
 public class SecurityConfig {
+
+    @Value("${app.auth.login-success-url:/auth/me}")
+    private String loginSuccessUrl;
 
     @Bean
     public SecurityFilterChain securityFilterChain(
@@ -42,7 +46,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/posts").authenticated()
 
                         // 수정은 로그인한 사용자만 진입하며 작성자 여부는 서비스에서 확인
-                        .requestMatchers(HttpMethod.PATCH, "/posts/{postId}").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/posts/{postId}", "/posts/{postId}/status").authenticated()
                         .requestMatchers(HttpMethod.DELETE, "/posts/{postId}").authenticated()
 
                         // 회원 정보와 CSRF 토큰은 로그인한 사용자만 조회
@@ -112,8 +116,8 @@ public class SecurityConfig {
                             .oidcUserService(googleUserServices.getObject())
                     )
 
-                    // 로그인 완료 후 내 회원 번호 확인
-                    .defaultSuccessUrl("/auth/me", true)
+                    // 실행 환경에서 정한 화면으로 로그인 완료 후 이동
+                    .defaultSuccessUrl(loginSuccessUrl, true)
 
                     // 로그인 실패 시 내부 오류 내용은 노출하지 않고 401 발생
                     .failureHandler((request, response, exception) ->
