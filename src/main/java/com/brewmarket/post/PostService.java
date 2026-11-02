@@ -14,6 +14,22 @@ public class PostService {
     private final UserRepository userRepository;
     private final PostRepository postRepository;
 
+    @Transactional(readOnly = true)
+    public PostPageResponse findPage(java.time.Instant beforeTime, Long beforeId) {
+        if ((beforeTime == null) != (beforeId == null) || (beforeId != null && beforeId <= 0)) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST);
+        }
+        // 한 건을 더 읽어 다음 목록 존재 여부를 판단한다.
+        List<Post> rows = beforeTime == null
+                ? postRepository.findTop21ByDeletedAtIsNullOrderByCreatedAtDescIdDesc()
+                : postRepository.findNextPage(beforeTime, beforeId, org.springframework.data.domain.PageRequest.of(0, 21));
+        boolean hasNext = rows.size() > 20;
+        List<Post> visible = rows.subList(0, Math.min(20, rows.size()));
+        Post last = hasNext ? visible.get(visible.size() - 1) : null;
+        return new PostPageResponse(visible.stream().map(PostSummaryResponse::from).toList(), hasNext,
+                last == null ? null : last.getCreatedAt(), last == null ? null : last.getId());
+    }
+
     @Transactional
     public void changeStatus(Long postId, Long userId, PostStatus status) {
         Post post = findActivePost(postId);
