@@ -9,16 +9,18 @@ public record PostDetailResponse(
         String description,
         Long price,
         PostStatus status,
-        Instant createdAt
+        Instant createdAt,
+        boolean canManage
 ) {
-    public static PostDetailResponse from(Post post) {
+    public static PostDetailResponse from(Post post, Long viewerId) {
         return new PostDetailResponse(
                 post.getId(),
                 post.getTitle(),
                 post.getDescription(),
                 post.getPrice(),
                 post.getStatus(),
-                post.getCreatedAt()
+                post.getCreatedAt(),
+                viewerId != null && post.getSellerId().equals(viewerId)
         );
     }
 }

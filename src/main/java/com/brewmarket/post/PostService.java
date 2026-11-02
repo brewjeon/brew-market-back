@@ -15,6 +15,13 @@ public class PostService {
     private final PostRepository postRepository;
 
     @Transactional
+    public void changeStatus(Long postId, Long userId, PostStatus status) {
+        Post post = findActivePost(postId);
+        if (!post.getSellerId().equals(userId)) throw new PostAccessDeniedException();
+        post.changeStatus(status);
+    }
+
+    @Transactional
     public void delete(Long postId, Long userId) {
         Post post = findActivePost(postId);
         if (!post.getSellerId().equals(userId)) {
@@ -41,11 +48,11 @@ public class PostService {
     }
 
     @Transactional(readOnly = true)
-    public PostDetailResponse findDetail(Long postId) {
+    public PostDetailResponse findDetail(Long postId, Long viewerId) {
         // 저장소의 기본 단건 조회 사용. 해당 게시글이 없으면 예외로 중단
         Post post = findActivePost(postId);
 
-        return PostDetailResponse.from(post);
+        return PostDetailResponse.from(post, viewerId);
     }
 
     // 조회한 엔티티를 그대로 노출하지 않고 공개할 목록 정보로 변환

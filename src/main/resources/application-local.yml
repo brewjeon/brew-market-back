@@ -12,3 +12,7 @@ spring:
               - openid
               - email
               - profile
+
+app:
+  auth:
+    login-success-url: http://localhost:5173/

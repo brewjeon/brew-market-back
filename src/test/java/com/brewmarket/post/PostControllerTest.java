@@ -48,6 +48,70 @@ class PostControllerTest {
     private PostService postService;
 
     @Test
+    void changesStatusUsingAuthenticatedUserId() throws Exception {
+        mockMvc.perform(patch("/posts/101/status")
+                        .with(oidcLogin().oidcUser(authenticatedUser(42L)))
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"RESERVED\"}"))
+                .andExpect(status().isNoContent());
+        verify(postService).changeStatus(101L, 42L, PostStatus.RESERVED);
+    }
+
+    @Test
+    void rejectsStatusChangeWithoutLogin() throws Exception {
+        mockMvc.perform(patch("/posts/101/status").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"RESERVED\"}"))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(postService);
+    }
+
+    @Test
+    void rejectsStatusChangeWithoutCsrf() throws Exception {
+        mockMvc.perform(patch("/posts/101/status")
+                        .with(oidcLogin().oidcUser(authenticatedUser(42L)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"RESERVED\"}"))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(postService);
+    }
+
+    @Test
+    void rejectsMissingOrUnknownStatus() throws Exception {
+        for (String body : new String[]{"{}", "{\"status\":\"UNKNOWN\"}"}) {
+            mockMvc.perform(patch("/posts/101/status")
+                            .with(oidcLogin().oidcUser(authenticatedUser(42L)))
+                            .with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest());
+        }
+        verifyNoInteractions(postService);
+    }
+
+    @Test
+    void returnsForbiddenWhenStatusServiceRejectsOwnership() throws Exception {
+        doThrow(new PostAccessDeniedException()).when(postService)
+                .changeStatus(101L, 42L, PostStatus.RESERVED);
+        mockMvc.perform(patch("/posts/101/status")
+                        .with(oidcLogin().oidcUser(authenticatedUser(42L)))
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"RESERVED\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("POST_ACCESS_DENIED"));
+    }
+
+    @Test
+    void returnsConflictWhenCompletedStatusCannotChange() throws Exception {
+        doThrow(new PostStatusConflictException()).when(postService)
+                .changeStatus(101L, 42L, PostStatus.RESERVED);
+        mockMvc.perform(patch("/posts/101/status")
+                        .with(oidcLogin().oidcUser(authenticatedUser(42L)))
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"RESERVED\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("POST_STATUS_CONFLICT"));
+    }
+
+    @Test
     void updatesPostUsingAuthenticatedUserId() throws Exception {
         mockMvc.perform(patch("/posts/101")
                         .with(oidcLogin().oidcUser(authenticatedUser(42L)))
@@ -80,9 +144,9 @@ class PostControllerTest {
     @Test
     void returnsPostDetailWithoutAuthentication() throws Exception {
         // 서비스 대역으로 응답을 준비하고, 로그인 없이 상세 조회 요청
-        when(postService.findDetail(101L)).thenReturn(new PostDetailResponse(
+        when(postService.findDetail(101L, null)).thenReturn(new PostDetailResponse(
                 101L, "머그컵", "사용하지 않는 컵입니다.", 3000L,
-                PostStatus.FOR_SALE, Instant.parse("2026-01-01T00:00:00Z")
+                PostStatus.FOR_SALE, Instant.parse("2026-01-01T00:00:00Z"), false
         ));
 
         mockMvc.perform(get("/posts/101"))
@@ -94,15 +158,16 @@ class PostControllerTest {
                 .andExpect(jsonPath("$.status").value("FOR_SALE"))
                 .andExpect(jsonPath("$.createdAt").value("2026-01-01T00:00:00Z"))
                 .andExpect(jsonPath("$.sellerId").doesNotExist())
+                .andExpect(jsonPath("$.canManage").value(false))
                 .andExpect(jsonPath("$.email").doesNotExist());
 
-        verify(postService).findDetail(101L);
+        verify(postService).findDetail(101L, null);
     }
 
     @Test
     void returnsNotFoundWhenPostDoesNotExist() throws Exception {
         // 서비스 예외가 공통 처리기를 거쳐 404와 오류 본문으로 바뀌는지 확인
-        when(postService.findDetail(999999L)).thenThrow(new PostNotFoundException());
+        when(postService.findDetail(999999L, null)).thenThrow(new PostNotFoundException());
 
         mockMvc.perform(get("/posts/999999"))
                 .andExpect(status().isNotFound())
@@ -111,7 +176,7 @@ class PostControllerTest {
                 .andExpect(jsonPath("$.fieldErrors").isArray())
                 .andExpect(jsonPath("$.fieldErrors").isEmpty());
 
-        verify(postService).findDetail(999999L);
+        verify(postService).findDetail(999999L, null);
     }
 
     @Test

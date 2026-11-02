@@ -27,6 +27,17 @@ public class PostController {
     // 게시글 조회와 등록에 사용할 서비스 객체의 참조 보관
     private final PostService postService;
 
+    @PatchMapping("/{postId}/status")
+    public ResponseEntity<Void> changeStatus(
+            @PathVariable("postId") Long postId,
+            @AuthenticationPrincipal BrewOidcUser user,
+            @Valid @RequestBody ChangePostStatusRequest request
+    ) {
+        if (user == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        postService.changeStatus(postId, user.getUserId(), request.status());
+        return ResponseEntity.noContent().build();
+    }
+
     @DeleteMapping("/{postId}")
     public ResponseEntity<Void> delete(
             @PathVariable("postId") Long postId,
@@ -62,8 +73,12 @@ public class PostController {
 
     // 주소에 들어온 게시글 번호로 상세 정보 한 건 조회
     @GetMapping("/{postId}")
-    public PostDetailResponse findDetail(@PathVariable("postId") Long postId) {
-        return postService.findDetail(postId);
+    public PostDetailResponse findDetail(
+            @PathVariable("postId") Long postId,
+            @AuthenticationPrincipal BrewOidcUser user
+    ) {
+        // 회원 번호는 요청 값이 아닌 서버 인증 정보에서 가져온다.
+        return postService.findDetail(postId, user == null ? null : user.getUserId());
     }
 
     // POST /posts 요청을 게시글 등록 처리와 연결

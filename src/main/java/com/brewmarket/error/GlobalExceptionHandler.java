@@ -16,6 +16,12 @@ import java.util.List;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(com.brewmarket.post.PostStatusConflictException.class)
+    public ResponseEntity<ErrorResponse> handlePostStatusConflict(com.brewmarket.post.PostStatusConflictException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("POST_STATUS_CONFLICT", exception.getMessage(), List.of()));
+    }
+
     @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
     public ResponseEntity<ErrorResponse> handleConcurrentChange(ObjectOptimisticLockingFailureException exception) {
         return ResponseEntity.status(HttpStatus.CONFLICT)
