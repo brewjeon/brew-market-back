@@ -48,6 +48,70 @@ class PostControllerTest {
     private PostService postService;
 
     @Test
+    void changesStatusUsingAuthenticatedUserId() throws Exception {
+        mockMvc.perform(patch("/posts/101/status")
+                        .with(oidcLogin().oidcUser(authenticatedUser(42L)))
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"RESERVED\"}"))
+                .andExpect(status().isNoContent());
+        verify(postService).changeStatus(101L, 42L, PostStatus.RESERVED);
+    }
+
+    @Test
+    void rejectsStatusChangeWithoutLogin() throws Exception {
+        mockMvc.perform(patch("/posts/101/status").with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"RESERVED\"}"))
+                .andExpect(status().isUnauthorized());
+        verifyNoInteractions(postService);
+    }
+
+    @Test
+    void rejectsStatusChangeWithoutCsrf() throws Exception {
+        mockMvc.perform(patch("/posts/101/status")
+                        .with(oidcLogin().oidcUser(authenticatedUser(42L)))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"RESERVED\"}"))
+                .andExpect(status().isForbidden());
+        verifyNoInteractions(postService);
+    }
+
+    @Test
+    void rejectsMissingOrUnknownStatus() throws Exception {
+        for (String body : new String[]{"{}", "{\"status\":\"UNKNOWN\"}"}) {
+            mockMvc.perform(patch("/posts/101/status")
+                            .with(oidcLogin().oidcUser(authenticatedUser(42L)))
+                            .with(csrf()).contentType(MediaType.APPLICATION_JSON).content(body))
+                    .andExpect(status().isBadRequest());
+        }
+        verifyNoInteractions(postService);
+    }
+
+    @Test
+    void returnsForbiddenWhenStatusServiceRejectsOwnership() throws Exception {
+        doThrow(new PostAccessDeniedException()).when(postService)
+                .changeStatus(101L, 42L, PostStatus.RESERVED);
+        mockMvc.perform(patch("/posts/101/status")
+                        .with(oidcLogin().oidcUser(authenticatedUser(42L)))
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"RESERVED\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("POST_ACCESS_DENIED"));
+    }
+
+    @Test
+    void returnsConflictWhenCompletedStatusCannotChange() throws Exception {
+        doThrow(new PostStatusConflictException()).when(postService)
+                .changeStatus(101L, 42L, PostStatus.RESERVED);
+        mockMvc.perform(patch("/posts/101/status")
+                        .with(oidcLogin().oidcUser(authenticatedUser(42L)))
+                        .with(csrf()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"RESERVED\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("POST_STATUS_CONFLICT"));
+    }
+
+    @Test
     void updatesPostUsingAuthenticatedUserId() throws Exception {
         mockMvc.perform(patch("/posts/101")
                         .with(oidcLogin().oidcUser(authenticatedUser(42L)))
