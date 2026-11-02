@@ -30,6 +30,36 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 @Transactional
 class PostServiceTest {
 
+    @Test
+    void pagesWithoutDuplicatesEvenWhenCursorPostIsDeleted() {
+        User seller = userRepository.saveAndFlush(new User("paging@example.com", "목록판매자"));
+        // 같은 트랜잭션의 생성 시각이 같아도 번호로 순서를 구분한다.
+        for (int i = 0; i < 25; i++) {
+            postRepository.saveAndFlush(new Post(seller.getId(), "목록 " + i, "설명", 1000L));
+        }
+        entityManager.clear();
+        PostPageResponse first = postService.findPage(null, null);
+        assertEquals(20, first.items().size());
+        assertEquals(true, first.hasNext());
+        Post cursorPost = postRepository.findById(first.nextId()).orElseThrow();
+        cursorPost.delete();
+        postRepository.flush();
+        PostPageResponse next = postService.findPage(first.nextCreatedAt(), first.nextId());
+        assertEquals(5, next.items().size());
+        assertFalse(next.hasNext());
+        assertEquals(null, next.nextId());
+        var ids = first.items().stream().map(PostSummaryResponse::id).collect(java.util.stream.Collectors.toSet());
+        assertFalse(next.items().stream().anyMatch(post -> ids.contains(post.id())));
+    }
+
+    @Test
+    void rejectsIncompletePageCursor() {
+        assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> postService.findPage(null, 1L));
+        assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> postService.findPage(java.time.Instant.now(), null));
+    }
+
     // 이 테스트 클래스에서 사용할 PostgreSQL 컨테이너입니다.
     @Container
 

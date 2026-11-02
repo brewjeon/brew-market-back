@@ -65,6 +65,14 @@ public class PostController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping(params = "paged=true")
+    public PostPageResponse findPage(
+            @org.springframework.web.bind.annotation.RequestParam(value = "beforeTime", required = false) java.time.Instant beforeTime,
+            @org.springframework.web.bind.annotation.RequestParam(value = "beforeId", required = false) Long beforeId
+    ) {
+        return postService.findPage(beforeTime, beforeId);
+    }
+
     // GET /posts 요청에는 최신 게시글 목록을 반환
     @GetMapping
     public List<PostSummaryResponse> findLatest() {
