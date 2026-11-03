@@ -31,6 +31,37 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 class PostServiceTest {
 
     @Test
+    void searchesWholeTitleTextAndKeepsKeywordOnNextPage() {
+        User seller = userRepository.saveAndFlush(new User("search@example.com", "검색판매자"));
+
+        for (int i = 0; i < 23; i++) {
+            postRepository.saveAndFlush(new Post(seller.getId(), "머그컵 " + i, "설명", 1000L));
+        }
+
+        postRepository.saveAndFlush(new Post(seller.getId(), "머리 빗", "머그컵", 1000L));
+
+        Post deleted = postRepository.saveAndFlush(new Post(seller.getId(), "머그컵 삭제", "설명", 1000L));
+
+        deleted.delete();
+        postRepository.flush();
+        entityManager.clear();
+
+        PostPageResponse first = postService.findPage(null, null, " 머그 ");
+
+        assertEquals(20, first.items().size());
+        assertEquals(true, first.hasNext());
+
+        PostPageResponse next = postService.findPage(first.nextCreatedAt(), first.nextId(), "머그");
+
+        assertEquals(3, next.items().size());
+        assertFalse(next.hasNext());
+        assertEquals(0, postService.findPage(null, null, "없는검색어").items().size());
+        assertEquals(0, postService.findPage(null, null, "%").items().size());
+        assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> postService.findPage(null, null, "가".repeat(101)));
+    }
+
+    @Test
     void pagesWithoutDuplicatesEvenWhenCursorPostIsDeleted() {
         User seller = userRepository.saveAndFlush(new User("paging@example.com", "목록판매자"));
         // 같은 트랜잭션의 생성 시각이 같아도 번호로 순서를 구분한다.

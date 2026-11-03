@@ -1,5 +1,10 @@
 package com.brewmarket.post;
 
+import java.time.Instant;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
+import org.springframework.data.domain.PageRequest;
+
 import com.brewmarket.user.UserRepository;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -15,34 +20,72 @@ public class PostService {
     private final PostRepository postRepository;
 
     @Transactional(readOnly = true)
-    public PostPageResponse findPage(java.time.Instant beforeTime, Long beforeId) {
-        if ((beforeTime == null) != (beforeId == null) || (beforeId != null && beforeId <= 0)) {
-            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST);
+    public PostPageResponse findPage(Instant beforeTime, Long beforeId) {
+        return findPage(beforeTime, beforeId, "");
+    }
+
+    @Transactional(readOnly = true)
+    public PostPageResponse findPage(Instant beforeTime, Long beforeId, String keyword) {
+        String query = keyword == null ? "" : keyword.strip();
+
+        if (query.length() > 100) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
         }
+
+        if ((beforeTime == null) != (beforeId == null) || (beforeId != null && beforeId <= 0)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+        }
+
         // 한 건을 더 읽어 다음 목록 존재 여부를 판단한다.
-        List<Post> rows = beforeTime == null
-                ? postRepository.findTop21ByDeletedAtIsNullOrderByCreatedAtDescIdDesc()
-                : postRepository.findNextPage(beforeTime, beforeId, org.springframework.data.domain.PageRequest.of(0, 21));
+        PageRequest pageRequest = PageRequest.of(0, 21);
+        List<Post> rows;
+
+        if (!query.isEmpty()) {
+            if (beforeTime == null) {
+                rows = postRepository.searchFirst(query, pageRequest);
+            } else {
+                rows = postRepository.searchNext(query, beforeTime, beforeId, pageRequest);
+            }
+        } else {
+            if (beforeTime == null) {
+                rows = postRepository.findTop21ByDeletedAtIsNullOrderByCreatedAtDescIdDesc();
+            } else {
+                rows = postRepository.findNextPage(beforeTime, beforeId, pageRequest);
+            }
+        }
+
         boolean hasNext = rows.size() > 20;
+
         List<Post> visible = rows.subList(0, Math.min(20, rows.size()));
         Post last = hasNext ? visible.get(visible.size() - 1) : null;
-        return new PostPageResponse(visible.stream().map(PostSummaryResponse::from).toList(), hasNext,
-                last == null ? null : last.getCreatedAt(), last == null ? null : last.getId());
+
+        return new PostPageResponse(
+                visible.stream().map(PostSummaryResponse::from).toList(),
+                hasNext,
+                last == null ? null : last.getCreatedAt(),
+                last == null ? null : last.getId()
+        );
     }
 
     @Transactional
     public void changeStatus(Long postId, Long userId, PostStatus status) {
         Post post = findActivePost(postId);
-        if (!post.getSellerId().equals(userId)) throw new PostAccessDeniedException();
+
+        if (!post.getSellerId().equals(userId)) {
+            throw new PostAccessDeniedException();
+        }
+
         post.changeStatus(status);
     }
 
     @Transactional
     public void delete(Long postId, Long userId) {
         Post post = findActivePost(postId);
+
         if (!post.getSellerId().equals(userId)) {
             throw new PostAccessDeniedException();
         }
+
         post.delete();
     }
 
