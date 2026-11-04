@@ -1,5 +1,8 @@
 package com.brewmarket.post;
 
+import org.springframework.web.bind.annotation.RequestParam;
+import java.time.Instant;
+
 import com.brewmarket.auth.BrewOidcUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -67,10 +70,11 @@ public class PostController {
 
     @GetMapping(params = "paged=true")
     public PostPageResponse findPage(
-            @org.springframework.web.bind.annotation.RequestParam(value = "beforeTime", required = false) java.time.Instant beforeTime,
-            @org.springframework.web.bind.annotation.RequestParam(value = "beforeId", required = false) Long beforeId
+            @RequestParam(value = "beforeTime", required = false) Instant beforeTime,
+            @RequestParam(value = "beforeId", required = false) Long beforeId,
+            @RequestParam(value = "keyword", defaultValue = "") String keyword
     ) {
-        return postService.findPage(beforeTime, beforeId);
+        return postService.findPage(beforeTime, beforeId, keyword);
     }
 
     // GET /posts 요청에는 최신 게시글 목록을 반환
