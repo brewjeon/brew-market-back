@@ -5,14 +5,20 @@ public record PostSummaryResponse(
         Long id,
         String title,
         Long price,
-        PostStatus status
+        PostStatus status,
+        String imageUrl
 ) {
+    public PostSummaryResponse(Long id, String title, Long price, PostStatus status) {
+        this(id, title, price, status, null);
+    }
+
     public static PostSummaryResponse from(Post post) {
         return new PostSummaryResponse(
                 post.getId(),
                 post.getTitle(),
                 post.getPrice(),
-                post.getStatus()
+                post.getStatus(),
+                post.getImageKey() == null ? null : "/posts/" + post.getId() + "/image"
         );
     }
 }

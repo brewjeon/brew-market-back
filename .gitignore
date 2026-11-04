@@ -69,4 +69,5 @@ bin/
 
 # Local environment variables
 .env
+/uploads/
 !.env.example

@@ -53,7 +53,7 @@ public class PostController {
         return ResponseEntity.noContent().build();
     }
 
-    @PatchMapping("/{postId}")
+    @PatchMapping(value = "/{postId}", consumes = "application/json")
     public ResponseEntity<Void> update(
             @PathVariable("postId") Long postId,
             @AuthenticationPrincipal BrewOidcUser user,
@@ -94,7 +94,7 @@ public class PostController {
     }
 
     // POST /posts 요청을 게시글 등록 처리와 연결
-    @PostMapping
+    @PostMapping(consumes = "application/json")
     public ResponseEntity<CreatePostResponse> create(
             // 서버가 관리하는 현재 로그인 사용자 정보
             @AuthenticationPrincipal BrewOidcUser user,

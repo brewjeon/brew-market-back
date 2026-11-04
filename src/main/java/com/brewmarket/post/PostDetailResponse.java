@@ -10,8 +10,14 @@ public record PostDetailResponse(
         Long price,
         PostStatus status,
         Instant createdAt,
-        boolean canManage
+        boolean canManage,
+        String imageUrl
 ) {
+    public PostDetailResponse(Long id, String title, String description, Long price,
+                              PostStatus status, Instant createdAt, boolean canManage) {
+        this(id, title, description, price, status, createdAt, canManage, null);
+    }
+
     public static PostDetailResponse from(Post post, Long viewerId) {
         return new PostDetailResponse(
                 post.getId(),
@@ -20,7 +26,8 @@ public record PostDetailResponse(
                 post.getPrice(),
                 post.getStatus(),
                 post.getCreatedAt(),
-                viewerId != null && post.getSellerId().equals(viewerId)
+                viewerId != null && post.getSellerId().equals(viewerId),
+                post.getImageKey() == null ? null : "/posts/" + post.getId() + "/image"
         );
     }
 }
