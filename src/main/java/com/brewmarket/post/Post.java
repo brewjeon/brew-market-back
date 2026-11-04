@@ -44,6 +44,18 @@ public class Post {
     @Column(nullable = false)
     private Long version;
 
+    @Column(name = "image_key", length = 100)
+    private String imageKey;
+
+    public String getImageKey() {
+        return imageKey;
+    }
+
+    public void changeImage(String key) {
+        if (deletedAt != null) throw new PostNotFoundException();
+        imageKey = key;
+    }
+
     public void changeStatus(PostStatus nextStatus) {
         if (deletedAt != null) throw new PostNotFoundException();
         if (nextStatus == null) throw new IllegalArgumentException("거래 상태는 필수입니다.");
