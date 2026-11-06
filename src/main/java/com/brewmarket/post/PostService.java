@@ -18,6 +18,8 @@ public class PostService {
 
     private final UserRepository userRepository;
     private final PostRepository postRepository;
+    private final PostImageRepository postImageRepository;
+    private final ImageDeletionQueue imageDeletionQueue;
 
     @Transactional(readOnly = true)
     public PostPageResponse findPage(Instant beforeTime, Long beforeId) {
@@ -86,7 +88,13 @@ public class PostService {
             throw new PostAccessDeniedException();
         }
 
-        post.delete();
+        var keys = postImageRepository.findByPostIdOrderByPositionAsc(postId).stream()
+                .map(PostImage::getImageKey).toList();
+        postImageRepository.deleteByPostId(postId);
+        postImageRepository.flush();
+        postRepository.delete(post);
+        postRepository.flush();
+        imageDeletionQueue.schedule(keys);
     }
 
     private Post findActivePost(Long postId) {
@@ -111,7 +119,7 @@ public class PostService {
         // 저장소의 기본 단건 조회 사용. 해당 게시글이 없으면 예외로 중단
         Post post = findActivePost(postId);
 
-        return PostDetailResponse.from(post, viewerId);
+        return PostDetailResponse.from(post, viewerId, postImageRepository.findByPostIdOrderByPositionAsc(postId));
     }
 
     // 조회한 엔티티를 그대로 노출하지 않고 공개할 목록 정보로 변환

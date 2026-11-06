@@ -20,10 +20,8 @@ class PostStatusTest {
     }
 
     @Test
-    void rejectsDeletedPostAndNullStatus() {
+    void rejectsNullStatus() {
         Post post = new Post(1L, "머그컵", "설명", 1000L);
         assertThrows(IllegalArgumentException.class, () -> post.changeStatus(null));
-        post.delete();
-        assertThrows(PostNotFoundException.class, () -> post.changeStatus(PostStatus.RESERVED));
     }
 }

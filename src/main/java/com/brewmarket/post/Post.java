@@ -65,12 +65,6 @@ public class Post {
         status = nextStatus;
     }
 
-    public void delete() {
-        if (deletedAt == null) {
-            deletedAt = Instant.now();
-        }
-    }
-
     public Instant getDeletedAt() {
         return deletedAt;
     }

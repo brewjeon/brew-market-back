@@ -1,15 +1,18 @@
 # Brew Market Backend
 
-## 로컬 게시글 사진
+## 게시글 사진과 임시저장
 
-- JPEG·PNG 한 장, 5MB·1200만 화소 이하를 지원합니다.
+- 사진은 선택 사항이며 JPEG·PNG 최대 5장, 장당 5MB·1200만 화소 이하를 지원합니다.
 - 기본 저장 폴더는 실행 위치의 uploads/post-images이며 Git에서 제외합니다. app.images.directory로 변경할 수 있습니다.
-- 등록·수정은 multipart의 post(JSON), image(선택), removeImage(수정 시 삭제 여부)를 받습니다. 기존 JSON 요청도 유지합니다.
-- 서버에서 PNG로 재인코딩한 파일의 식별자를 DB에 기록하며 GET /posts/{id}/image로 조회합니다.
+- 등록·수정은 multipart의 post(JSON), images(선택), order(JSON)를 받습니다. 기존 단일 image 요청과 JSON 요청도 유지합니다.
+- 서버에서 PNG로 재인코딩한 파일의 식별자와 순서를 DB에 기록합니다. 상세 응답의 imageUrls로 사진을 조회하고 첫 사진을 대표 사진으로 씁니다.
+- 미완성 글도 계정당 최대 5개까지 임시저장할 수 있습니다. 마지막 저장부터 3일이 지나면 글과 사진을 삭제합니다.
+- 게시된 글을 삭제하면 DB 행을 영구 삭제하고, 커밋 후 사진 파일도 삭제합니다.
 - 교체·삭제는 DB 커밋 후 기존 파일을 정리하고 롤백 시 새 파일을 정리합니다.
+- 파일 삭제가 실패하면 DB에 남긴 작업을 주기적으로 다시 처리합니다.
 - 파일 누락은 404와 서버 로그, 화면의 사진 없음 표시로 처리합니다.
-- 삭제된 게시글의 파일 보존 기간, 정기 잔여 파일 정리, 외부 저장소 연결은 후속 작업입니다.
-- 강제 종료 시 잔여 파일이 생길 수 있습니다. DB와 파일 시스템은 하나의 원자적 트랜잭션이 아닙니다.
+- DB와 파일 시스템은 하나의 원자적 트랜잭션이 아닙니다. 저장 직후 프로세스가 강제 종료되면 새 파일이 남을 수 있습니다.
+- 요청 형식과 파일별 목적은 [사진·임시저장 계약](docs/post-media-drafts.md)에 정리했습니다.
 
 지역 기반 거래 서비스 **Brew Market**의 Spring Boot API 서버입니다. 사용자 등록부터 게시글, 위치 검색, 거래 흐름까지 단계적으로 구현하며 데이터 무결성과 실패 조건을 검증합니다.
 
@@ -23,7 +26,7 @@
 - Flyway 기반 사용자 테이블 마이그레이션과 JPA 스키마 검증
 - Testcontainers 기반 DB 통합 테스트와 GitHub Actions 빌드·테스트 워크플로
 
-현재 사용자 등록은 이메일과 닉네임만 저장합니다. 비밀번호, 로그인, JWT 인증·권한 처리는 아직 구현하지 않았습니다. PostGIS 이미지를 사용하지만 위치 검색 API는 향후 구현 범위입니다.
+사용자 등록은 이메일과 닉네임을 저장하며, 웹 로그인에는 구글 OIDC를 사용합니다. 비밀번호·JWT 방식은 사용하지 않습니다. PostGIS 이미지를 사용하지만 위치 검색 API는 향후 구현 범위입니다.
 
 ## 기술 스택
 
@@ -38,29 +41,29 @@
 
 ## 로컬 실행
 
-Java 21과 Docker Compose를 사용할 수 있는 환경에서 Docker를 실행합니다. 아래 명령은 저장소 루트에서 PowerShell로 실행합니다.
+Java 21과 Docker Compose를 사용할 수 있는 환경에서 Docker를 실행합니다. 아래 명령은 저장소 루트에서 Windows Git Bash와 macOS 터미널에 공통으로 사용할 수 있습니다.
 
 ### 1. 환경변수 설정
 
 `.env`가 없다면 예제 파일을 복사합니다.
 
-```powershell
-Copy-Item .env.example .env
+```sh
+cp .env.example .env
 ```
 
 `.env`의 `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`를 로컬 개발용 값으로 수정합니다. `POSTGRES_PORT`의 기본 예제 값은 `5432`입니다. `.env`는 Git에 올리지 않습니다.
 
 ### 2. DB 시작
 
-```powershell
+```sh
 docker compose up -d
 docker compose ps
 ```
 
 DB가 준비되면 애플리케이션을 실행합니다.
 
-```powershell
-./gradlew.bat bootRun
+```sh
+./gradlew bootRun
 ```
 
 애플리케이션은 `.env`를 읽어 DB에 연결합니다. Flyway는 `brew_market` 스키마에 마이그레이션을 적용하고, JPA는 `ddl-auto: validate`로 매핑을 검증합니다.
@@ -74,11 +77,14 @@ DB를 중지할 때는 `docker compose down`을 실행합니다. 데이터는 na
 | GET | `/health` | 서버 상태 확인 | `200`, `{"status":"UP"}` |
 | POST | `/users` | 이메일·닉네임 등록 | `201`, `id`·`email`·`nickname` |
 | PATCH | `/posts/{postId}` | 작성자 본인의 제목·본문·가격 수정 | `204`, 응답 본문 없음 |
-| DELETE | `/posts/{postId}` | 작성자 본인의 게시글 삭제 표시 | `204`, 응답 본문 없음 |
+| DELETE | `/posts/{postId}` | 작성자 본인의 게시글 영구 삭제 | `204`, 응답 본문 없음 |
+| GET/POST | `/drafts` | 본인 임시저장 목록·새 임시저장 | `200`/`201` |
+| GET/PATCH/DELETE | `/drafts/{id}` | 본인 임시저장 조회·다시 저장·삭제 | `200`/`204` |
+| POST | `/drafts/{id}/publish` | 필수 입력 확인 후 게시 | `201` |
 
 게시글 수정에는 로그인 세션과 CSRF 토큰이 필요합니다. 요청·오류 응답·검증 범위는 [게시글 수정 API](docs/post-update.md)를 참고하세요.
 
-삭제도 로그인 세션과 CSRF 토큰이 필요하며 DB 행은 보존합니다. 삭제된 글은 목록에서 제외하고 상세 조회·수정은 404로 처리합니다. [게시글 삭제 API](docs/post-delete.md)를 참고하세요.
+삭제도 로그인 세션과 CSRF 토큰이 필요하며 DB 행은 제거합니다. 삭제 후 상세 조회·수정은 404로 처리합니다. [사진·임시저장 계약](docs/post-media-drafts.md)을 참고하세요.
 
 ### 상태 확인
 
