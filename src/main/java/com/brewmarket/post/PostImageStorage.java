@@ -5,6 +5,6 @@ import org.springframework.web.multipart.MultipartFile;
 
 public interface PostImageStorage {
     String save(MultipartFile image);
-    void delete(String key);
+    boolean delete(String key);
     Path resolve(String key);
 }

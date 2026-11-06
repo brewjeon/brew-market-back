@@ -19,7 +19,7 @@ public class PostService {
     private final UserRepository userRepository;
     private final PostRepository postRepository;
     private final PostImageRepository postImageRepository;
-    private final PostImageStorage imageStorage;
+    private final ImageDeletionQueue imageDeletionQueue;
 
     @Transactional(readOnly = true)
     public PostPageResponse findPage(Instant beforeTime, Long beforeId) {
@@ -94,10 +94,7 @@ public class PostService {
         postImageRepository.flush();
         postRepository.delete(post);
         postRepository.flush();
-        org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
-                new org.springframework.transaction.support.TransactionSynchronization() {
-                    @Override public void afterCommit() { keys.forEach(imageStorage::delete); }
-                });
+        imageDeletionQueue.schedule(keys);
     }
 
     private Post findActivePost(Long postId) {

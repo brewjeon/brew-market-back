@@ -29,6 +29,9 @@ public class PostImageController {
             @RequestPart(value = "image", required = false) MultipartFile legacyImage
     ) {
         requireLogin(user);
+        if ((order == null && images != null) || (order != null && legacyImage != null)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "사진 요청 형식을 확인해 주세요.");
+        }
         Long id = order == null
                 ? service.create(user.getUserId(), request, legacyImage)
                 : service.create(user.getUserId(), request, images, order);
@@ -46,6 +49,10 @@ public class PostImageController {
             @RequestParam(value = "removeImage", defaultValue = "false") boolean removeImage
     ) {
         requireLogin(user);
+        if ((order == null && images != null)
+                || (order != null && (legacyImage != null || removeImage))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "사진 요청 형식을 확인해 주세요.");
+        }
         if (order == null) service.update(id, user.getUserId(), request, legacyImage, removeImage);
         else service.update(id, user.getUserId(), request, images, order);
         return ResponseEntity.noContent().build();

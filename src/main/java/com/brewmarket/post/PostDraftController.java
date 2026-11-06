@@ -1,6 +1,7 @@
 package com.brewmarket.post;
 
 import com.brewmarket.auth.BrewOidcUser;
+import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.io.Resource;
@@ -49,11 +50,14 @@ public class PostDraftController {
         return service.save(userId(user), id, request, files, order);
     }
 
-    @PostMapping("/{id}/publish")
+    @PostMapping(value = "/{id}/publish", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<CreatePostResponse> publish(
-            @PathVariable("id") Long id, @AuthenticationPrincipal BrewOidcUser user) {
+            @PathVariable("id") Long id, @AuthenticationPrincipal BrewOidcUser user,
+            @Valid @RequestPart("post") CreatePostRequest request,
+            @RequestPart("order") List<String> order,
+            @RequestPart(value = "images", required = false) List<MultipartFile> files) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(new CreatePostResponse(service.publish(userId(user), id)));
+                .body(new CreatePostResponse(service.publish(userId(user), id, request, files, order)));
     }
 
     @DeleteMapping("/{id}")

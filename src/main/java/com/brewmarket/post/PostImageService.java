@@ -22,6 +22,7 @@ public class PostImageService {
     private final PostImageRepository images;
     private final PostDraftImageRepository draftImages;
     private final PostImageStorage storage;
+    private final ImageDeletionQueue deletionQueue;
 
     @Transactional
     public Long create(Long userId, CreatePostRequest request, MultipartFile image) {
@@ -60,6 +61,7 @@ public class PostImageService {
         List<PostImage> before = images.findByPostIdOrderByPositionAsc(id);
         List<String> oldKeys = before.stream().map(PostImage::getImageKey).toList();
         List<String> next = compose(oldKeys, files, order);
+        if (next.equals(oldKeys)) return;
         images.deleteByPostId(id);
         images.flush();
         for (int i = 0; i < next.size(); i++) images.save(new PostImage(id, next.get(i), i));
@@ -72,6 +74,7 @@ public class PostImageService {
         List<String> oldKeys = draftImages.findByDraftIdOrderByPositionAsc(draftId).stream()
                 .map(PostDraftImage::getImageKey).toList();
         List<String> next = compose(oldKeys, files, order);
+        if (next.equals(oldKeys)) return;
         draftImages.deleteByDraftId(draftId);
         draftImages.flush();
         for (int i = 0; i < next.size(); i++) draftImages.save(new PostDraftImage(draftId, next.get(i), i));
@@ -94,7 +97,7 @@ public class PostImageService {
         List<String> keys = draftImages.findByDraftIdOrderByPositionAsc(draftId).stream()
                 .map(PostDraftImage::getImageKey).toList();
         draftImages.deleteByDraftId(draftId);
-        afterCommit(() -> keys.forEach(storage::delete));
+        deletionQueue.schedule(keys);
     }
 
     public List<String> draftUrls(Long draftId) {
@@ -164,13 +167,7 @@ public class PostImageService {
     }
 
     private void cleanupRemoved(List<String> oldKeys, List<String> next) {
-        afterCommit(() -> oldKeys.stream().filter(key -> !next.contains(key)).forEach(storage::delete));
-    }
-
-    private void afterCommit(Runnable action) {
-        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
-            @Override public void afterCommit() { action.run(); }
-        });
+        deletionQueue.schedule(oldKeys.stream().filter(key -> !next.contains(key)).toList());
     }
 
     private void badOrder() {

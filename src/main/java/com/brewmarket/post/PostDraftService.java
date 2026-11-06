@@ -19,6 +19,10 @@ public class PostDraftService {
     @Transactional
     public PostDraftResponse save(Long sellerId, Long id, DraftSaveRequest request,
                                   List<MultipartFile> files, List<String> order) {
+        if ((request.title() != null && request.title().length() > 100)
+                || (request.price() != null && request.price() < 0)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "제목은 100자 이하, 가격은 0 이상이어야 합니다.");
+        }
         Instant now = Instant.now();
         PostDraft draft;
         if (id == null) {
@@ -29,7 +33,7 @@ public class PostDraftService {
             }
             draft = new PostDraft(sellerId);
         } else {
-            draft = active(id, sellerId, now);
+            draft = locked(id, sellerId, now);
         }
         draft.save(request.title(), request.description(), request.price(), now);
         drafts.saveAndFlush(draft);
@@ -50,9 +54,11 @@ public class PostDraftService {
     }
 
     @Transactional
-    public Long publish(Long sellerId, Long id) {
-        PostDraft draft = active(id, sellerId, Instant.now());
-        Long postId = posts.create(sellerId, draft.getTitle(), draft.getDescription(), draft.getPrice());
+    public Long publish(Long sellerId, Long id, CreatePostRequest request,
+                        List<MultipartFile> files, List<String> order) {
+        PostDraft draft = locked(id, sellerId, Instant.now());
+        Long postId = posts.create(sellerId, request.title(), request.description(), request.price());
+        images.replaceDraft(id, files, order);
         images.transferDraft(id, postId);
         drafts.delete(draft);
         return postId;
@@ -60,7 +66,7 @@ public class PostDraftService {
 
     @Transactional
     public void delete(Long sellerId, Long id) {
-        PostDraft draft = active(id, sellerId, Instant.now());
+        PostDraft draft = locked(id, sellerId, Instant.now());
         images.deleteDraftImages(id);
         drafts.delete(draft);
     }
@@ -81,5 +87,12 @@ public class PostDraftService {
     private PostDraft active(Long id, Long sellerId, Instant now) {
         return drafts.findByIdAndSellerIdAndExpiresAtAfter(id, sellerId, now)
                 .orElseThrow(PostNotFoundException::new);
+    }
+
+    private PostDraft locked(Long id, Long sellerId, Instant now) {
+        PostDraft draft = drafts.findActiveForUpdate(id, sellerId, now)
+                .orElseThrow(PostNotFoundException::new);
+        if (!draft.getExpiresAt().isAfter(Instant.now())) throw new PostNotFoundException();
+        return draft;
     }
 }

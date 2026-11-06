@@ -22,7 +22,7 @@ import org.testcontainers.utility.DockerImageName;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.oidcLogin;
@@ -51,7 +51,7 @@ class PostDeleteTest {
     private PostRepository postRepository;
 
     @Test
-    void ownerDeletesPostAndPublicReadsHideItWhileDatabasePreservesIt() throws Exception {
+    void ownerDeletesPostPermanently() throws Exception {
         User seller = userRepository.saveAndFlush(
                 new User(UUID.randomUUID() + "@example.com", "작성자")
         );
@@ -74,16 +74,9 @@ class PostDeleteTest {
                         .with(csrf()))
                 .andExpect(status().isNoContent());
 
-        // 물리 삭제가 아니라 삭제 시각만 기록되며 원래 정보는 보존
-        Post deleted = postRepository.findById(original.getId()).orElseThrow();
-        assertEquals(countBefore, postRepository.count());
-        assertNotNull(deleted.getDeletedAt());
-        assertEquals(original.getTitle(), deleted.getTitle());
-        assertEquals(original.getDescription(), deleted.getDescription());
-        assertEquals(original.getPrice(), deleted.getPrice());
-        assertEquals(original.getSellerId(), deleted.getSellerId());
-        assertEquals(original.getCreatedAt(), deleted.getCreatedAt());
-        assertEquals(original.getStatus(), deleted.getStatus());
+        // 데이터베이스에서도 게시글 행이 사라져야 한다.
+        assertFalse(postRepository.existsById(original.getId()));
+        assertEquals(countBefore - 1, postRepository.count());
 
         mockMvc.perform(get("/posts"))
                 .andExpect(status().isOk())

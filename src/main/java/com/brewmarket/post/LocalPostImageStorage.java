@@ -83,13 +83,15 @@ public class LocalPostImageStorage implements PostImageStorage {
     }
 
     @Override
-    public void delete(String key) {
-        if (key == null) return;
+    public boolean delete(String key) {
+        if (key == null) return true;
 
         try {
             Files.deleteIfExists(resolve(key));
+            return true;
         } catch (IOException exception) {
             log.warn("사진 파일 정리 실패: {}", key, exception);
+            return false;
         }
     }
 }
