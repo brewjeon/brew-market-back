@@ -20,6 +20,12 @@ public class InquiryController {
     public record InquiryResponse(long roomId) {}
     public record MessageRequest(String content) {}
     public record ReadRequest(Long messageId) {}
+    public record ReadState(long peerLastReadId) {}
+
+    @GetMapping("/{id}/read")
+    public ReadState readState(@AuthenticationPrincipal BrewOidcUser user, @PathVariable("id") long id) {
+        return new ReadState(service.peerLastReadId(id, userId(user)));
+    }
 
     @PutMapping("/{id}/read")
     @ResponseStatus(HttpStatus.NO_CONTENT)

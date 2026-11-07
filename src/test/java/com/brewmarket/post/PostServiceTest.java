@@ -54,6 +54,8 @@ class PostServiceTest {
         inquiryService.markRead(roomId, buyer.getId(), latest);
         inquiryService.markRead(roomId, buyer.getId(), first);
 
+        assertEquals(latest, inquiryService.peerLastReadId(roomId, seller.getId()));
+        assertEquals(0L, inquiryService.peerLastReadId(roomId, buyer.getId()));
         assertFalse(inquiryService.rooms(buyer.getId(), Long.MAX_VALUE).rooms().getFirst().unread());
         assertEquals(true, inquiryService.rooms(seller.getId(), Long.MAX_VALUE).rooms().getFirst().unread());
     }

@@ -103,6 +103,19 @@ public class InquiryService {
                 row.getString("content")), roomId);
     }
 
+    @Transactional(readOnly = true)
+    public long peerLastReadId(long roomId, long userId) {
+        return db.query("""
+                SELECT CASE WHEN buyer_id = ?
+                    THEN seller_last_read_id ELSE buyer_last_read_id END AS peer_last_read_id
+                FROM brew_market.inquiry_rooms
+                WHERE id = ? AND (buyer_id = ? OR seller_id = ?)
+                """, (row, i) -> row.getLong("peer_last_read_id"), userId, roomId, userId, userId)
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+    }
+
     @Transactional
     public void markRead(long roomId, long userId, long messageId) {
         requireParticipant(roomId, userId);
