@@ -28,6 +28,14 @@ public class InquiryController {
         return new InquiryResponse(service.inquire(request.postId(), userId(user), request.content()));
     }
 
+    @GetMapping("/by-post/{postId}")
+    public ExistingRoomResponse existingRoom(@AuthenticationPrincipal BrewOidcUser user,
+                                             @PathVariable("postId") long postId) {
+        return new ExistingRoomResponse(service.findRoom(postId, userId(user)));
+    }
+
+    public record ExistingRoomResponse(Long roomId) {}
+
     @GetMapping
     public InquiryService.RoomPage rooms(@AuthenticationPrincipal BrewOidcUser user,
                                          @RequestParam(value = "before", required = false) Long before) {

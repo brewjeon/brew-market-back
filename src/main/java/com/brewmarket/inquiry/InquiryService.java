@@ -53,6 +53,17 @@ public class InquiryService {
     }
 
     @Transactional(readOnly = true)
+    public Long findRoom(long postId, long buyerId) {
+        return db.query("""
+                SELECT id FROM brew_market.inquiry_rooms
+                WHERE post_id = ? AND buyer_id = ?
+                """, (row, i) -> row.getLong("id"), postId, buyerId)
+                .stream()
+                .findFirst()
+                .orElse(null);
+    }
+
+    @Transactional(readOnly = true)
     public RoomPage rooms(long userId, long before) {
         List<Room> rows = db.query("""
                 SELECT r.id, r.post_id, p.title, m.content, m.id AS message_id
