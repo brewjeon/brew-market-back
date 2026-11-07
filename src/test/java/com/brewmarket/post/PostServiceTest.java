@@ -42,7 +42,7 @@ class PostServiceTest {
 
         Post deleted = postRepository.saveAndFlush(new Post(seller.getId(), "머그컵 삭제", "설명", 1000L));
 
-        deleted.delete();
+        postService.delete(deleted.getId(), seller.getId());
         postRepository.flush();
         entityManager.clear();
 
@@ -72,8 +72,7 @@ class PostServiceTest {
         PostPageResponse first = postService.findPage(null, null);
         assertEquals(20, first.items().size());
         assertEquals(true, first.hasNext());
-        Post cursorPost = postRepository.findById(first.nextId()).orElseThrow();
-        cursorPost.delete();
+        postService.delete(first.nextId(), seller.getId());
         postRepository.flush();
         PostPageResponse next = postService.findPage(first.nextCreatedAt(), first.nextId());
         assertEquals(5, next.items().size());
