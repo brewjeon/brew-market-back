@@ -35,6 +35,30 @@ class PostServiceTest {
     private InquiryService inquiryService;
 
     @Test
+    void keepsReadProgressSeparateAndIgnoresOlderAcknowledgements() {
+        User seller = userRepository.saveAndFlush(new User("read-seller@example.com", "판매자"));
+        User buyer = userRepository.saveAndFlush(new User("read-buyer@example.com", "구매자"));
+        Long postId = postService.create(seller.getId(), "머그컵", "판매합니다", 1000L);
+        long roomId = inquiryService.inquire(postId, buyer.getId(), "문의합니다");
+        long first = inquiryService.messages(roomId, buyer.getId()).getFirst().id();
+        assertFalse(inquiryService.rooms(buyer.getId(), Long.MAX_VALUE).rooms().getFirst().unread());
+        assertEquals(true, inquiryService.rooms(seller.getId(), Long.MAX_VALUE).rooms().getFirst().unread());
+
+        inquiryService.send(roomId, seller.getId(), "가능합니다");
+        long reply = inquiryService.messages(roomId, buyer.getId()).getLast().id();
+        inquiryService.send(roomId, seller.getId(), "내일 어떠세요?");
+        long latest = inquiryService.messages(roomId, buyer.getId()).getLast().id();
+
+        inquiryService.markRead(roomId, buyer.getId(), reply);
+        assertEquals(true, inquiryService.rooms(buyer.getId(), Long.MAX_VALUE).rooms().getFirst().unread());
+        inquiryService.markRead(roomId, buyer.getId(), latest);
+        inquiryService.markRead(roomId, buyer.getId(), first);
+
+        assertFalse(inquiryService.rooms(buyer.getId(), Long.MAX_VALUE).rooms().getFirst().unread());
+        assertEquals(true, inquiryService.rooms(seller.getId(), Long.MAX_VALUE).rooms().getFirst().unread());
+    }
+
+    @Test
     void keepsConversationAfterListingIsDeleted() {
         User seller = userRepository.saveAndFlush(new User("inquiry-seller@example.com", "판매자"));
         User buyer = userRepository.saveAndFlush(new User("inquiry-buyer@example.com", "구매자"));

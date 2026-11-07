@@ -19,6 +19,17 @@ public class InquiryController {
     public record InquiryRequest(Long postId, String content) {}
     public record InquiryResponse(long roomId) {}
     public record MessageRequest(String content) {}
+    public record ReadRequest(Long messageId) {}
+
+    @PutMapping("/{id}/read")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void markRead(@AuthenticationPrincipal BrewOidcUser user, @PathVariable("id") long id,
+                         @RequestBody ReadRequest request) {
+        if (request.messageId() == null || request.messageId() <= 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+        }
+        service.markRead(id, userId(user), request.messageId());
+    }
 
     @PostMapping
     public InquiryResponse inquire(@AuthenticationPrincipal BrewOidcUser user, @RequestBody InquiryRequest request) {

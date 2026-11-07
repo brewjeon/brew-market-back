@@ -15,7 +15,8 @@ public class InquiryService {
         this.db = db;
     }
 
-    public record Room(long id, Long postId, String title, String lastMessage, long lastMessageId) {}
+    public record Room(long id, Long postId, String title, String lastMessage,
+                       long lastMessageId, boolean unread) {}
     public record Message(long id, long senderId, String content) {}
     public record RoomPage(List<Room> rooms, Long nextBefore) {}
     private record Listing(long sellerId, String title) {}
@@ -68,7 +69,15 @@ public class InquiryService {
     @Transactional(readOnly = true)
     public RoomPage rooms(long userId, long before) {
         List<Room> rows = db.query("""
-                SELECT r.id, r.post_id, COALESCE(p.title, r.post_title) AS title, m.content, m.id AS message_id
+                SELECT r.id, r.post_id, COALESCE(p.title, r.post_title) AS title,
+                       m.content, m.id AS message_id,
+                       EXISTS (
+                           SELECT 1 FROM brew_market.inquiry_messages unread
+                           WHERE unread.room_id = r.id
+                             AND unread.sender_id <> ?
+                             AND unread.id > CASE WHEN r.buyer_id = ?
+                                 THEN r.buyer_last_read_id ELSE r.seller_last_read_id END
+                       ) AS has_unread
                 FROM brew_market.inquiry_rooms r
                 LEFT JOIN brew_market.posts p ON p.id = r.post_id
                 JOIN LATERAL (
@@ -78,8 +87,8 @@ public class InquiryService {
                 WHERE (r.buyer_id = ? OR r.seller_id = ?) AND m.id < ?
                 ORDER BY m.id DESC LIMIT 11
                 """, (row, i) -> new Room(row.getLong("id"), row.getObject("post_id", Long.class),
-                row.getString("title"), row.getString("content"), row.getLong("message_id")),
-                userId, userId, before);
+                row.getString("title"), row.getString("content"), row.getLong("message_id"),
+                row.getBoolean("has_unread")), userId, userId, userId, userId, before);
         List<Room> page = rows.subList(0, Math.min(10, rows.size()));
         return new RoomPage(page, rows.size() > 10 ? page.getLast().lastMessageId() : null);
     }
@@ -92,6 +101,26 @@ public class InquiryService {
                 WHERE room_id = ? ORDER BY id
                 """, (row, i) -> new Message(row.getLong("id"), row.getLong("sender_id"),
                 row.getString("content")), roomId);
+    }
+
+    @Transactional
+    public void markRead(long roomId, long userId, long messageId) {
+        requireParticipant(roomId, userId);
+
+        int updated = db.update("""
+                UPDATE brew_market.inquiry_rooms r
+                SET buyer_last_read_id = CASE WHEN r.buyer_id = ?
+                        THEN GREATEST(r.buyer_last_read_id, ?) ELSE r.buyer_last_read_id END,
+                    seller_last_read_id = CASE WHEN r.seller_id = ?
+                        THEN GREATEST(r.seller_last_read_id, ?) ELSE r.seller_last_read_id END
+                WHERE r.id = ? AND EXISTS (
+                    SELECT 1 FROM brew_market.inquiry_messages m
+                    WHERE m.room_id = r.id AND m.id = ?
+                )
+                """, userId, messageId, userId, messageId, roomId, messageId);
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "해당 대화방의 메시지 번호가 필요합니다.");
+        }
     }
 
     private void requireParticipant(long roomId, long userId) {
@@ -107,6 +136,9 @@ public class InquiryService {
     }
 
     private void append(long roomId, long userId, String content) {
+        // 같은 방의 메시지가 번호 순서대로 확정되도록 방을 먼저 잠근다.
+        db.queryForObject("SELECT id FROM brew_market.inquiry_rooms WHERE id = ? FOR UPDATE",
+                Long.class, roomId);
         db.update("""
                 INSERT INTO brew_market.inquiry_messages (room_id, sender_id, content)
                 VALUES (?, ?, ?)
