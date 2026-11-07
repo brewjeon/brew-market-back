@@ -42,6 +42,7 @@ public class SecurityConfig {
                         // 게시글 목록과 단건 상세는 로그인 없이 조회 가능
                         .requestMatchers(HttpMethod.GET, "/posts", "/posts/{postId}", "/posts/{postId}/image", "/posts/{postId}/images/{index}").permitAll()
                         .requestMatchers("/drafts", "/drafts/**").authenticated()
+                        .requestMatchers("/inquiries", "/inquiries/**").authenticated()
 
                         // 게시글 등록은 인증된 사용자만 허용
                         .requestMatchers(HttpMethod.POST, "/posts").authenticated()

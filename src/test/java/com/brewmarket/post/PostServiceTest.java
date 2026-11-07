@@ -1,6 +1,7 @@
 package com.brewmarket.post;
 
 import com.brewmarket.BrewMarketBackApplication;
+import com.brewmarket.inquiry.InquiryService;
 import com.brewmarket.user.User;
 import com.brewmarket.user.UserRepository;
 import jakarta.persistence.EntityManager;
@@ -30,6 +31,25 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 @Transactional
 class PostServiceTest {
 
+    @Autowired
+    private InquiryService inquiryService;
+
+    @Test
+    void keepsConversationAfterListingIsDeleted() {
+        User seller = userRepository.saveAndFlush(new User("inquiry-seller@example.com", "판매자"));
+        User buyer = userRepository.saveAndFlush(new User("inquiry-buyer@example.com", "구매자"));
+        Long postId = postService.create(seller.getId(), "머그컵", "판매합니다", 1000L);
+        long roomId = inquiryService.inquire(postId, buyer.getId(), "문의합니다");
+
+        postService.delete(postId, seller.getId());
+
+        var room = inquiryService.rooms(buyer.getId(), Long.MAX_VALUE).rooms().getFirst();
+        assertEquals(roomId, room.id());
+        assertEquals(null, room.postId());
+        assertEquals("머그컵", room.title());
+        assertEquals("문의합니다", inquiryService.messages(roomId, buyer.getId()).getFirst().content());
+    }
+
     @Test
     void searchesWholeTitleTextAndKeepsKeywordOnNextPage() {
         User seller = userRepository.saveAndFlush(new User("search@example.com", "검색판매자"));
@@ -42,7 +62,7 @@ class PostServiceTest {
 
         Post deleted = postRepository.saveAndFlush(new Post(seller.getId(), "머그컵 삭제", "설명", 1000L));
 
-        deleted.delete();
+        postService.delete(deleted.getId(), seller.getId());
         postRepository.flush();
         entityManager.clear();
 
@@ -72,8 +92,7 @@ class PostServiceTest {
         PostPageResponse first = postService.findPage(null, null);
         assertEquals(20, first.items().size());
         assertEquals(true, first.hasNext());
-        Post cursorPost = postRepository.findById(first.nextId()).orElseThrow();
-        cursorPost.delete();
+        postService.delete(first.nextId(), seller.getId());
         postRepository.flush();
         PostPageResponse next = postService.findPage(first.nextCreatedAt(), first.nextId());
         assertEquals(5, next.items().size());
