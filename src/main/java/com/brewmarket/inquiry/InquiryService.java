@@ -15,32 +15,34 @@ public class InquiryService {
         this.db = db;
     }
 
-    public record Room(long id, long postId, String title, String lastMessage, long lastMessageId) {}
+    public record Room(long id, Long postId, String title, String lastMessage, long lastMessageId) {}
     public record Message(long id, long senderId, String content) {}
     public record RoomPage(List<Room> rooms, Long nextBefore) {}
+    private record Listing(long sellerId, String title) {}
 
     @Transactional
     public long inquire(long postId, long buyerId, String content) {
         validate(content);
-        var sellers = db.query("""
-                SELECT seller_id FROM brew_market.posts WHERE id = ? AND deleted_at IS NULL
+        var listings = db.query("""
+                SELECT seller_id, title FROM brew_market.posts WHERE id = ? AND deleted_at IS NULL
                 FOR SHARE
-                """, (row, i) -> row.getLong("seller_id"), postId);
-        if (sellers.isEmpty()) {
+                """, (row, i) -> new Listing(row.getLong("seller_id"), row.getString("title")), postId);
+        if (listings.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND);
         }
-        long sellerId = sellers.getFirst();
+        Listing listing = listings.getFirst();
+        long sellerId = listing.sellerId();
         if (sellerId == buyerId) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "내 게시글에는 문의할 수 없습니다.");
         }
 
         // 고유 제약을 기준으로 동시 문의도 같은 방에 연결한다.
         long roomId = db.queryForObject("""
-                INSERT INTO brew_market.inquiry_rooms (post_id, buyer_id, seller_id)
-                VALUES (?, ?, ?)
+                INSERT INTO brew_market.inquiry_rooms (post_id, buyer_id, seller_id, post_title)
+                VALUES (?, ?, ?, ?)
                 ON CONFLICT (post_id, buyer_id) DO UPDATE SET buyer_id = EXCLUDED.buyer_id
                 RETURNING id
-                """, Long.class, postId, buyerId, sellerId);
+                """, Long.class, postId, buyerId, sellerId, listing.title());
         append(roomId, buyerId, content);
         return roomId;
     }
@@ -66,16 +68,16 @@ public class InquiryService {
     @Transactional(readOnly = true)
     public RoomPage rooms(long userId, long before) {
         List<Room> rows = db.query("""
-                SELECT r.id, r.post_id, p.title, m.content, m.id AS message_id
+                SELECT r.id, r.post_id, COALESCE(p.title, r.post_title) AS title, m.content, m.id AS message_id
                 FROM brew_market.inquiry_rooms r
-                JOIN brew_market.posts p ON p.id = r.post_id
+                LEFT JOIN brew_market.posts p ON p.id = r.post_id
                 JOIN LATERAL (
                     SELECT id, content FROM brew_market.inquiry_messages
                     WHERE room_id = r.id ORDER BY id DESC LIMIT 1
                 ) m ON true
                 WHERE (r.buyer_id = ? OR r.seller_id = ?) AND m.id < ?
                 ORDER BY m.id DESC LIMIT 11
-                """, (row, i) -> new Room(row.getLong("id"), row.getLong("post_id"),
+                """, (row, i) -> new Room(row.getLong("id"), row.getObject("post_id", Long.class),
                 row.getString("title"), row.getString("content"), row.getLong("message_id")),
                 userId, userId, before);
         List<Room> page = rows.subList(0, Math.min(10, rows.size()));
