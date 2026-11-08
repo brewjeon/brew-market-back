@@ -34,6 +34,22 @@ class PostServiceTest {
     @Autowired
     private InquiryService inquiryService;
 
+    @Autowired
+    private PostDraftService postDraftService;
+
+    @Test
+    void refusesSixthDraftAfterLockingSeller() {
+        User seller = userRepository.saveAndFlush(new User("draft-limit@example.com", "임시저장 판매자"));
+        var request = new DraftSaveRequest("임시 제목", null, null);
+        for (int i = 0; i < 5; i++) {
+            postDraftService.save(seller.getId(), null, request, java.util.List.of(), java.util.List.of());
+        }
+
+        var error = assertThrows(org.springframework.web.server.ResponseStatusException.class,
+                () -> postDraftService.save(seller.getId(), null, request, java.util.List.of(), java.util.List.of()));
+        assertEquals(409, error.getStatusCode().value());
+    }
+
     @Test
     void keepsReadProgressSeparateAndIgnoresOlderAcknowledgements() {
         User seller = userRepository.saveAndFlush(new User("read-seller@example.com", "판매자"));

@@ -1,5 +1,7 @@
 package com.brewmarket.post;
 
+import jakarta.persistence.LockModeType;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.data.domain.Pageable;
@@ -51,4 +53,8 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     List<Post> findTop20ByDeletedAtIsNullOrderByCreatedAtDescIdDesc();
 
     Optional<Post> findByIdAndDeletedAtIsNull(Long id);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select p from Post p where p.id = :id")
+    Optional<Post> findByIdForUpdate(@Param("id") long id);
 }

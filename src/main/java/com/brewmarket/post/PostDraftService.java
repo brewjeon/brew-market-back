@@ -1,5 +1,6 @@
 package com.brewmarket.post;
 
+import com.brewmarket.user.UserRepository;
 import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,7 @@ public class PostDraftService {
     private final PostDraftRepository drafts;
     private final PostImageService images;
     private final PostService posts;
+    private final UserRepository users;
 
     @Transactional
     public PostDraftResponse save(Long sellerId, Long id, DraftSaveRequest request,
@@ -27,7 +29,8 @@ public class PostDraftService {
         PostDraft draft;
         if (id == null) {
             // 한 사용자가 동시에 여러 탭에서 저장해도 최대 5개 제한을 지킨다.
-            if (drafts.lockSeller(sellerId) == null) throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+            users.findByIdForUpdate(sellerId)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
             if (drafts.findBySellerIdAndExpiresAtAfterOrderByUpdatedAtDesc(sellerId, now).size() >= 5) {
                 throw new ResponseStatusException(HttpStatus.CONFLICT, "임시저장은 최대 5개입니다.");
             }

@@ -10,9 +10,6 @@ import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Lock;
 
 public interface PostDraftRepository extends JpaRepository<PostDraft, Long> {
-    @Query(value = "SELECT id FROM brew_market.users WHERE id = :sellerId FOR UPDATE", nativeQuery = true)
-    Long lockSeller(@Param("sellerId") Long sellerId);
-
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select d from PostDraft d where d.id = :id and d.sellerId = :sellerId and d.expiresAt > :now")
     Optional<PostDraft> findActiveForUpdate(@Param("id") Long id, @Param("sellerId") Long sellerId,
