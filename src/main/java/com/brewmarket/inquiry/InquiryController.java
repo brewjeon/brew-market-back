@@ -3,17 +3,22 @@ package com.brewmarket.inquiry;
 import com.brewmarket.auth.BrewOidcUser;
 import java.util.List;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @RestController
 @RequestMapping("/inquiries")
 public class InquiryController {
     private final InquiryService service;
+    private final InquiryUpdates updates;
 
-    public InquiryController(InquiryService service) {
+    InquiryController(InquiryService service, InquiryUpdates updates) {
         this.service = service;
+        this.updates = updates;
     }
 
     public record InquiryRequest(Long postId, String content) {}
@@ -21,6 +26,15 @@ public class InquiryController {
     public record MessageRequest(String content) {}
     public record ReadRequest(Long messageId) {}
     public record ReadState(long peerLastReadId) {}
+
+    @GetMapping(value = "/{id}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public ResponseEntity<SseEmitter> events(@AuthenticationPrincipal BrewOidcUser user, @PathVariable("id") long id) {
+        service.checkParticipant(id, userId(user));
+        return ResponseEntity.ok()
+                .header("Cache-Control", "no-cache, no-transform")
+                .header("X-Accel-Buffering", "no")
+                .body(updates.subscribe(id));
+    }
 
     @GetMapping("/{id}/read")
     public ReadState readState(@AuthenticationPrincipal BrewOidcUser user, @PathVariable("id") long id) {
