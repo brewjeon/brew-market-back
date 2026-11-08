@@ -4,6 +4,7 @@ import com.brewmarket.post.Post;
 import com.brewmarket.post.PostRepository;
 import java.util.List;
 import java.util.Set;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -15,15 +16,18 @@ public class InquiryService {
     private final PostRepository postRepository;
     private final InquiryRoomRepository roomRepository;
     private final InquiryMessageRepository messageRepository;
+    private final ApplicationEventPublisher events;
 
     public InquiryService(
             PostRepository postRepository,
             InquiryRoomRepository roomRepository,
-            InquiryMessageRepository messageRepository
+            InquiryMessageRepository messageRepository,
+            ApplicationEventPublisher events
     ) {
         this.postRepository = postRepository;
         this.roomRepository = roomRepository;
         this.messageRepository = messageRepository;
+        this.events = events;
     }
 
     public record Room(long id, Long postId, String title, String lastMessage,
@@ -48,6 +52,7 @@ public class InquiryService {
         InquiryRoom room = roomRepository.findByPostIdAndBuyerId(postId, buyerId)
                 .orElseGet(() -> roomRepository.save(new InquiryRoom(post, buyerId)));
         messageRepository.save(new InquiryMessage(room, buyerId, content));
+        events.publishEvent(new InquiryUpdates.RoomChanged(room.id));
         return room.id;
     }
 
@@ -58,6 +63,7 @@ public class InquiryService {
         // 방 잠금을 획득한 뒤 메시지 번호를 생성해 읽음 위치와 저장 순서를 맞춘다.
         InquiryRoom room = requireParticipant(roomId, userId, true);
         messageRepository.save(new InquiryMessage(room, userId, content));
+        events.publishEvent(new InquiryUpdates.RoomChanged(roomId));
     }
 
     @Transactional(readOnly = true)
@@ -94,6 +100,11 @@ public class InquiryService {
     }
 
     @Transactional(readOnly = true)
+    public void checkParticipant(long roomId, long userId) {
+        requireParticipant(roomId, userId, false);
+    }
+
+    @Transactional(readOnly = true)
     public long peerLastReadId(long roomId, long userId) {
         InquiryRoom room = requireParticipant(roomId, userId, false);
         return room.buyerId == userId ? room.sellerLastReadId : room.buyerLastReadId;
@@ -105,7 +116,11 @@ public class InquiryService {
         if (!messageRepository.existsByIdAndRoom_Id(messageId, roomId)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "해당 대화방의 메시지 번호가 필요합니다.");
         }
-        room.markRead(userId, messageId);
+        long previousReadId = room.buyerId == userId ? room.buyerLastReadId : room.sellerLastReadId;
+        if (messageId > previousReadId) {
+            room.markRead(userId, messageId);
+            events.publishEvent(new InquiryUpdates.RoomChanged(roomId));
+        }
     }
 
     private InquiryRoom requireParticipant(long roomId, long userId, boolean forUpdate) {
