@@ -3,7 +3,7 @@ package com.brewmarket.inquiry;
 import com.brewmarket.post.Post;
 import com.brewmarket.post.PostRepository;
 import java.util.List;
-import java.util.Set;
+import java.util.HashMap;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
@@ -31,9 +31,9 @@ public class InquiryService {
     }
 
     public record Room(long id, Long postId, String title, String lastMessage,
-                       long lastMessageId, boolean unread) {}
+                       long lastMessageId, boolean unread, long unreadCount) {}
     public record Message(long id, long senderId, String content) {}
-    public record RoomPage(List<Room> rooms, Long nextBefore) {}
+    public record RoomPage(List<Room> rooms, Long nextBefore, long unreadRoomCount) {}
 
     @Transactional
     public long inquire(long postId, long buyerId, String content) {
@@ -52,7 +52,7 @@ public class InquiryService {
         InquiryRoom room = roomRepository.findByPostIdAndBuyerId(postId, buyerId)
                 .orElseGet(() -> roomRepository.save(new InquiryRoom(post, buyerId)));
         messageRepository.save(new InquiryMessage(room, buyerId, content));
-        events.publishEvent(new InquiryUpdates.RoomChanged(room.id));
+        publishRoomChanged(room);
         return room.id;
     }
 
@@ -63,7 +63,7 @@ public class InquiryService {
         // 방 잠금을 획득한 뒤 메시지 번호를 생성해 읽음 위치와 저장 순서를 맞춘다.
         InquiryRoom room = requireParticipant(roomId, userId, true);
         messageRepository.save(new InquiryMessage(room, userId, content));
-        events.publishEvent(new InquiryUpdates.RoomChanged(roomId));
+        publishRoomChanged(room);
     }
 
     @Transactional(readOnly = true)
@@ -73,24 +73,29 @@ public class InquiryService {
 
     @Transactional(readOnly = true)
     public RoomPage rooms(long userId, long before) {
-        var rows = messageRepository.findLatestMessages(userId, before, PageRequest.of(0, 11));
+        return rooms(userId, before, false);
+    }
+
+    @Transactional(readOnly = true)
+    public RoomPage rooms(long userId, long before, boolean unreadOnly) {
+        long unreadRoomCount = messageRepository.countUnreadRooms(userId);
+        var rows = messageRepository.findLatestMessages(userId, before, unreadOnly, PageRequest.of(0, 11));
         if (rows.isEmpty()) {
-            return new RoomPage(List.of(), null);
+            return new RoomPage(List.of(), null, unreadRoomCount);
         }
 
         var page = rows.subList(0, Math.min(10, rows.size()));
         List<Long> roomIds = page.stream().map(InquiryMessageRepository.LatestMessage::getRoomId).toList();
-        Set<Long> unreadRoomIds = messageRepository.findUnreadRoomIds(roomIds, userId);
+        var unreadCounts = new HashMap<Long, Long>();
+        messageRepository.findUnreadCounts(roomIds, userId)
+                .forEach(row -> unreadCounts.put(row.getRoomId(), row.getCount()));
 
-        List<Room> rooms = page.stream().map(row -> new Room(
-                row.getRoomId(),
-                row.getPostId(),
-                row.getTitle(),
-                row.getContent(),
-                row.getMessageId(),
-                unreadRoomIds.contains(row.getRoomId())
-        )).toList();
-        return new RoomPage(rooms, rows.size() > 10 ? rooms.getLast().lastMessageId() : null);
+        List<Room> rooms = page.stream().map(row -> {
+            long count = unreadCounts.getOrDefault(row.getRoomId(), 0L);
+            return new Room(row.getRoomId(), row.getPostId(), row.getTitle(), row.getContent(),
+                    row.getMessageId(), count > 0, count);
+        }).toList();
+        return new RoomPage(rooms, rows.size() > 10 ? rooms.getLast().lastMessageId() : null, unreadRoomCount);
     }
 
     @Transactional(readOnly = true)
@@ -119,8 +124,12 @@ public class InquiryService {
         long previousReadId = room.buyerId == userId ? room.buyerLastReadId : room.sellerLastReadId;
         if (messageId > previousReadId) {
             room.markRead(userId, messageId);
-            events.publishEvent(new InquiryUpdates.RoomChanged(roomId));
+            publishRoomChanged(room);
         }
+    }
+
+    private void publishRoomChanged(InquiryRoom room) {
+        events.publishEvent(new InquiryUpdates.RoomChanged(room.id, room.buyerId, room.sellerId));
     }
 
     private InquiryRoom requireParticipant(long roomId, long userId, boolean forUpdate) {

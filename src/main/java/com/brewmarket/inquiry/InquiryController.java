@@ -30,10 +30,19 @@ public class InquiryController {
     @GetMapping(value = "/{id}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public ResponseEntity<SseEmitter> events(@AuthenticationPrincipal BrewOidcUser user, @PathVariable("id") long id) {
         service.checkParticipant(id, userId(user));
+        return eventStream(updates.subscribe(id));
+    }
+
+    @GetMapping(value = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public ResponseEntity<SseEmitter> listEvents(@AuthenticationPrincipal BrewOidcUser user) {
+        return eventStream(updates.subscribeList(userId(user)));
+    }
+
+    private ResponseEntity<SseEmitter> eventStream(SseEmitter emitter) {
         return ResponseEntity.ok()
                 .header("Cache-Control", "no-cache, no-transform")
                 .header("X-Accel-Buffering", "no")
-                .body(updates.subscribe(id));
+                .body(emitter);
     }
 
     @GetMapping("/{id}/read")
@@ -69,8 +78,9 @@ public class InquiryController {
 
     @GetMapping
     public InquiryService.RoomPage rooms(@AuthenticationPrincipal BrewOidcUser user,
-                                         @RequestParam(value = "before", required = false) Long before) {
-        return service.rooms(userId(user), before == null ? Long.MAX_VALUE : before);
+                                         @RequestParam(value = "before", required = false) Long before,
+                                         @RequestParam(value = "unreadOnly", defaultValue = "false") boolean unreadOnly) {
+        return service.rooms(userId(user), before == null ? Long.MAX_VALUE : before, unreadOnly);
     }
 
     @GetMapping("/{id}/messages")

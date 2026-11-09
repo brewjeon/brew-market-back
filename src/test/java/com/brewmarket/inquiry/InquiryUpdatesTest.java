@@ -75,6 +75,52 @@ class InquiryUpdatesTest {
         return users.save(new User(UUID.randomUUID() + "@example.com", "테스트 회원")).getId();
     }
 
+    @Test
+    void countsUnreadMessagesAndFiltersRoomsBeforePagination() throws Exception {
+        long seller = createUser();
+        long buyer = createUser();
+        long stranger = createUser();
+        long mug = posts.create(seller, "머그컵", "판매합니다", 1000L);
+        long shelf = posts.create(seller, "책장", "판매합니다", 1000L);
+        long mugRoom = inquiries.inquire(mug, buyer, "첫 문의");
+        long shelfRoom = inquiries.inquire(shelf, buyer, "책장 문의");
+
+        var sellerUpdates = subscribeToList(seller);
+        var strangerUpdates = subscribeToList(stranger);
+        try {
+            inquiries.send(mugRoom, buyer, "추가 문의");
+            var firstPage = inquiries.rooms(seller, Long.MAX_VALUE, true);
+            var first = firstPage.rooms().getFirst();
+            assertEquals(mugRoom, first.id());
+            assertEquals(2L, first.unreadCount());
+            assertEquals(2L, firstPage.unreadRoomCount());
+            assertEquals(0L, inquiries.rooms(buyer, Long.MAX_VALUE, true).unreadRoomCount());
+
+            var older = inquiries.rooms(seller, first.lastMessageId(), true);
+            assertEquals(shelfRoom, older.rooms().getFirst().id());
+            assertEquals(1L, older.rooms().getFirst().unreadCount());
+            assertEquals(2L, older.unreadRoomCount());
+
+            inquiries.markRead(mugRoom, seller, first.lastMessageId());
+            var unread = inquiries.rooms(seller, Long.MAX_VALUE, true);
+            assertEquals(1L, unread.unreadRoomCount());
+            assertEquals(1, unread.rooms().size());
+            assertEquals(shelfRoom, unread.rooms().getFirst().id());
+            assertEquals(2, changeCount(sellerUpdates.getResponse().getContentAsString()));
+            assertEquals(0, changeCount(strangerUpdates.getResponse().getContentAsString()));
+        } finally {
+            sellerUpdates.getRequest().getAsyncContext().complete();
+            strangerUpdates.getRequest().getAsyncContext().complete();
+        }
+    }
+
+    private org.springframework.test.web.servlet.MvcResult subscribeToList(long userId) throws Exception {
+        return mockMvc.perform(get("/inquiries/events").with(oidcLogin().oidcUser(member(userId))))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted())
+                .andReturn();
+    }
+
     private BrewOidcUser member(long userId) {
         var token = OidcIdToken.withTokenValue("test-token").subject(Long.toString(userId)).build();
         var user = new DefaultOidcUser(AuthorityUtils.createAuthorityList("ROLE_USER"), token);
