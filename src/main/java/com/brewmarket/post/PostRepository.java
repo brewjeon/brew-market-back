@@ -49,6 +49,20 @@ public interface PostRepository extends JpaRepository<Post, Long> {
 
     List<Post> findTop21ByDeletedAtIsNullOrderByCreatedAtDescIdDesc();
 
+    List<Post> findBySellerIdAndDeletedAtIsNullOrderByCreatedAtDescIdDesc(Long sellerId, Pageable limit);
+
+    @Query("""
+            select p from Post p where p.sellerId = :sellerId and p.deletedAt is null
+            and (p.createdAt < :beforeTime or (p.createdAt = :beforeTime and p.id < :beforeId))
+            order by p.createdAt desc, p.id desc
+            """)
+    List<Post> findNextMine(
+            @Param("sellerId") Long sellerId,
+            @Param("beforeTime") Instant beforeTime,
+            @Param("beforeId") Long beforeId,
+            Pageable limit
+    );
+
     // DB에서 최신 20개만 조회하고, 생성 시각이 같으면 번호가 큰 글을 먼저 가져옴
     List<Post> findTop20ByDeletedAtIsNullOrderByCreatedAtDescIdDesc();
 

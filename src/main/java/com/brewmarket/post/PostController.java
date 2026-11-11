@@ -77,6 +77,18 @@ public class PostController {
         return postService.findPage(beforeTime, beforeId, keyword);
     }
 
+    @GetMapping("/mine")
+    public PostPageResponse findMine(
+            @AuthenticationPrincipal BrewOidcUser user,
+            @RequestParam(value = "beforeTime", required = false) Instant beforeTime,
+            @RequestParam(value = "beforeId", required = false) Long beforeId
+    ) {
+        if (user == null) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED);
+        }
+        return postService.findMine(user.getUserId(), beforeTime, beforeId);
+    }
+
     // GET /posts 요청에는 최신 게시글 목록을 반환
     @GetMapping
     public List<PostSummaryResponse> findLatest() {

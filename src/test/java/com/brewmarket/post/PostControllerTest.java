@@ -48,6 +48,20 @@ class PostControllerTest {
     private PostService postService;
 
     @Test
+    void onlyListsPostsForTheAuthenticatedMember() throws Exception {
+        mockMvc.perform(get("/posts/mine")).andExpect(status().isUnauthorized());
+        verifyNoInteractions(postService);
+
+        when(postService.findMine(42L, null, null))
+                .thenReturn(new PostPageResponse(java.util.List.of(), false, null, null));
+        mockMvc.perform(get("/posts/mine").param("sellerId", "99")
+                        .with(oidcLogin().oidcUser(authenticatedUser(42L))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items").isEmpty());
+        verify(postService).findMine(42L, null, null);
+    }
+
+    @Test
     void changesStatusUsingAuthenticatedUserId() throws Exception {
         mockMvc.perform(patch("/posts/101/status")
                         .with(oidcLogin().oidcUser(authenticatedUser(42L)))
