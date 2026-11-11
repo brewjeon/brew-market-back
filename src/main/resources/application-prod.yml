@@ -1,0 +1,21 @@
+spring:
+  config:
+    import: classpath:google-oauth.yml
+  datasource:
+    url: ${APP_DATABASE_URL}
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            redirect-uri: ${APP_PUBLIC_ORIGIN}/login/oauth2/code/google
+
+server:
+  servlet:
+    session:
+      cookie:
+        secure: true
+
+app:
+  auth:
+    login-success-url: ${APP_PUBLIC_ORIGIN}/
