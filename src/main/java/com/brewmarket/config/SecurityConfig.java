@@ -44,6 +44,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/posts", "/posts/{postId}", "/posts/{postId}/image", "/posts/{postId}/images/{index}").permitAll()
                         .requestMatchers("/drafts", "/drafts/**").authenticated()
                         .requestMatchers("/inquiries", "/inquiries/**").authenticated()
+                        .requestMatchers("/favorites", "/favorites/**").authenticated()
 
                         // 게시글 등록은 인증된 사용자만 허용
                         .requestMatchers(HttpMethod.POST, "/posts").authenticated()
