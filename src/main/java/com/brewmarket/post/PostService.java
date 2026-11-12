@@ -34,9 +34,7 @@ public class PostService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
         }
 
-        if ((beforeTime == null) != (beforeId == null) || (beforeId != null && beforeId <= 0)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
-        }
+        validateCursor(beforeTime, beforeId);
 
         // 한 건을 더 읽어 다음 목록 존재 여부를 판단한다.
         PageRequest pageRequest = PageRequest.of(0, 21);
@@ -56,6 +54,26 @@ public class PostService {
             }
         }
 
+        return toPage(rows);
+    }
+
+    @Transactional(readOnly = true)
+    public PostPageResponse findMine(Long sellerId, Instant beforeTime, Long beforeId) {
+        validateCursor(beforeTime, beforeId);
+        var limit = PageRequest.of(0, 21);
+        var rows = beforeTime == null
+                ? postRepository.findBySellerIdAndDeletedAtIsNullOrderByCreatedAtDescIdDesc(sellerId, limit)
+                : postRepository.findNextMine(sellerId, beforeTime, beforeId, limit);
+        return toPage(rows);
+    }
+
+    private void validateCursor(Instant beforeTime, Long beforeId) {
+        if ((beforeTime == null) != (beforeId == null) || (beforeId != null && beforeId <= 0)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
+        }
+    }
+
+    private PostPageResponse toPage(List<Post> rows) {
         boolean hasNext = rows.size() > 20;
 
         List<Post> visible = rows.subList(0, Math.min(20, rows.size()));

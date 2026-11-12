@@ -38,6 +38,25 @@ class PostServiceTest {
     private PostDraftService postDraftService;
 
     @Test
+    void pagesOnlyTheSignedInSellersPosts() {
+        User seller = userRepository.saveAndFlush(new User("my-posts@example.com", "내 글 판매자"));
+        User other = userRepository.saveAndFlush(new User("other-posts@example.com", "다른 판매자"));
+        long oldest = postService.create(seller.getId(), "처음 게시글", "설명", 1000L);
+        for (int i = 0; i < 20; i++) {
+            postService.create(seller.getId(), "게시글 " + i, "설명", 1000L);
+        }
+        postService.create(other.getId(), "다른 회원 글", "설명", 1000L);
+        entityManager.clear();
+
+        var first = postService.findMine(seller.getId(), null, null);
+        assertEquals(20, first.items().size());
+        assertEquals(true, first.hasNext());
+        var next = postService.findMine(seller.getId(), first.nextCreatedAt(), first.nextId());
+        assertEquals(java.util.List.of(oldest), next.items().stream().map(PostSummaryResponse::id).toList());
+        assertFalse(next.hasNext());
+    }
+
+    @Test
     void refusesSixthDraftAfterLockingSeller() {
         User seller = userRepository.saveAndFlush(new User("draft-limit@example.com", "임시저장 판매자"));
         var request = new DraftSaveRequest("임시 제목", null, null);

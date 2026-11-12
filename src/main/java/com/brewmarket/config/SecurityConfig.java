@@ -34,6 +34,7 @@ public class SecurityConfig {
 
                         // 상태 확인은 로그인 없이 허용
                         .requestMatchers(HttpMethod.GET, "/health").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/posts/mine").authenticated()
 
                         // 기존 회원 등록 기능 유지
                         // 이메일 소유권 확인이나 구글 로그인 완료를 의미하지는 않음
