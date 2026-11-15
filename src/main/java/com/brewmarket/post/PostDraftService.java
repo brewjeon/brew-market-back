@@ -60,7 +60,7 @@ public class PostDraftService {
     public Long publish(Long sellerId, Long id, CreatePostRequest request,
                         List<MultipartFile> files, List<String> order) {
         PostDraft draft = locked(id, sellerId, Instant.now());
-        Long postId = posts.create(sellerId, request.title(), request.description(), request.price());
+        Long postId = posts.create(sellerId, request.title(), request.description(), request.price(), request.neighborhoodId());
         images.replaceDraft(id, files, order);
         images.transferDraft(id, postId);
         drafts.delete(draft);

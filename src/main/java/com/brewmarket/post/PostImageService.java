@@ -43,7 +43,7 @@ public class PostImageService {
 
     @Transactional
     public Long create(Long userId, CreatePostRequest request, List<MultipartFile> files, List<String> order) {
-        Long id = posts.create(userId, request.title(), request.description(), request.price());
+        Long id = posts.create(userId, request.title(), request.description(), request.price(), request.neighborhoodId());
         replacePost(id, files, order);
         return id;
     }
@@ -51,7 +51,7 @@ public class PostImageService {
     @Transactional
     public void update(Long id, Long userId, UpdatePostRequest request,
                        List<MultipartFile> files, List<String> order) {
-        posts.update(id, userId, request.title(), request.description(), request.price());
+        posts.update(id, userId, request.title(), request.description(), request.price(), request.neighborhoodId());
         replacePost(id, files, order);
     }
 
