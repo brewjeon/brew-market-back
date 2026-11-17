@@ -21,6 +21,15 @@ public class NeighborhoodService {
     private final UserRepository users;
     private final EntityManager entityManager;
 
+    public record ListedNeighborhood(Long id, String name) {}
+
+    @Transactional(readOnly = true)
+    public List<ListedNeighborhood> list() {
+        return neighborhoods.findAllByOrderByNameAscIdAsc().stream()
+                .map(neighborhood -> new ListedNeighborhood(neighborhood.id, neighborhood.name))
+                .toList();
+    }
+
     @Transactional(readOnly = true)
     public List<NeighborhoodOption> active(Long userId) {
         return verifications.findActive(userId, Instant.now());

@@ -6,6 +6,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 interface NeighborhoodRepository extends JpaRepository<Neighborhood, Long> {
+    List<Neighborhood> findAllByOrderByNameAscIdAsc();
+
     @Query(value = """
             SELECT id FROM brew_market.neighborhoods
             WHERE public.ST_Contains(boundary, public.ST_Transform(

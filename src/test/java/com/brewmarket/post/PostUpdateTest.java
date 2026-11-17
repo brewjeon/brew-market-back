@@ -57,6 +57,8 @@ class PostUpdateTest {
     @Autowired
     private PostRepository postRepository;
     @Autowired
+    private PostService postService;
+    @Autowired
     private JdbcTemplate jdbc;
 
     private User seller;
@@ -81,6 +83,39 @@ class PostUpdateTest {
         Post saved = postRepository.saveAndFlush(post);
         original = postRepository.findById(saved.getId()).orElseThrow();
         assertNotNull(original.getCreatedAt());
+    }
+
+    @Test
+    void publicListCombinesNeighborhoodSearchAndPagination() throws Exception {
+        Long neighborhoodId = original.getNeighborhoodId();
+        String keyword = UUID.randomUUID().toString();
+        jdbc.update("""
+                INSERT INTO brew_market.posts (seller_id, title, description, price, neighborhood_id)
+                SELECT ?, ?, '설명', 0, ? FROM generate_series(1, 21)
+                """, seller.getId(), keyword, neighborhoodId);
+        jdbc.update("""
+                INSERT INTO brew_market.posts (seller_id, title, description, price)
+                VALUES (?, ?, '설명', 0)
+                """, seller.getId(), keyword);
+
+        mockMvc.perform(get("/neighborhoods"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == %d)]".formatted(neighborhoodId)).exists());
+        mockMvc.perform(get("/posts").param("paged", "true")
+                        .param("keyword", keyword).param("neighborhoodId", neighborhoodId.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(20))
+                .andExpect(jsonPath("$.hasNext").value(true));
+        PostPageResponse first = postService.findPage(null, null, keyword, neighborhoodId);
+        mockMvc.perform(get("/posts").param("paged", "true")
+                        .param("keyword", keyword).param("neighborhoodId", neighborhoodId.toString())
+                        .param("beforeTime", first.nextCreatedAt().toString())
+                        .param("beforeId", first.nextId().toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.items.length()").value(1))
+                .andExpect(jsonPath("$.hasNext").value(false));
+        PostPageResponse all = postService.findPage(null, null, keyword);
+        assertEquals(2, postService.findPage(all.nextCreatedAt(), all.nextId(), keyword).items().size());
     }
 
     @Test

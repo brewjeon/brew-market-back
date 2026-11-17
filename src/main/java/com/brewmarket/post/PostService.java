@@ -30,9 +30,14 @@ public class PostService {
 
     @Transactional(readOnly = true)
     public PostPageResponse findPage(Instant beforeTime, Long beforeId, String keyword) {
+        return findPage(beforeTime, beforeId, keyword, null);
+    }
+
+    @Transactional(readOnly = true)
+    public PostPageResponse findPage(Instant beforeTime, Long beforeId, String keyword, Long neighborhoodId) {
         String query = keyword == null ? "" : keyword.strip();
 
-        if (query.length() > 100) {
+        if (query.length() > 100 || (neighborhoodId != null && neighborhoodId <= 0)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST);
         }
 
@@ -40,21 +45,9 @@ public class PostService {
 
         // 한 건을 더 읽어 다음 목록 존재 여부를 판단한다.
         PageRequest pageRequest = PageRequest.of(0, 21);
-        List<Post> rows;
-
-        if (!query.isEmpty()) {
-            if (beforeTime == null) {
-                rows = postRepository.searchFirst(query, pageRequest);
-            } else {
-                rows = postRepository.searchNext(query, beforeTime, beforeId, pageRequest);
-            }
-        } else {
-            if (beforeTime == null) {
-                rows = postRepository.findTop21ByDeletedAtIsNullOrderByCreatedAtDescIdDesc();
-            } else {
-                rows = postRepository.findNextPage(beforeTime, beforeId, pageRequest);
-            }
-        }
+        List<Post> rows = beforeTime == null
+                ? postRepository.findFirstPage(query, neighborhoodId, pageRequest)
+                : postRepository.findNextPage(query, neighborhoodId, beforeTime, beforeId, pageRequest);
 
         return toPage(rows);
     }

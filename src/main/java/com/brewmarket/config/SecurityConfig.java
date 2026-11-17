@@ -45,6 +45,7 @@ public class SecurityConfig {
                         .requestMatchers("/drafts", "/drafts/**").authenticated()
                         .requestMatchers("/inquiries", "/inquiries/**").authenticated()
                         .requestMatchers("/favorites", "/favorites/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/neighborhoods").permitAll()
                         .requestMatchers("/neighborhoods/**").authenticated()
 
                         // 게시글 등록은 인증된 사용자만 허용
