@@ -90,6 +90,14 @@ docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d brew_market_neighbo
 
 처음 등록하면 `INSERT 0 1`이 출력됩니다. 같은 지역 코드가 이미 있으면 `INSERT 0 0`이 출력됩니다. 글쓰기 화면에서 성수1가1동 위치로 인증하고 글을 게시한 뒤, 상세 화면에 거래 동네 이름이 보이는지 확인합니다.
 
+수원에서 실제 위치로 테스트할 때는 같은 출처의 수원시 행정동 44곳을 등록할 수 있습니다. 평소 로컬 개발 DB에 마이그레이션이 적용된 뒤 아래 명령을 실행합니다. 별도 검증용 DB에 넣으려면 `-d "$POSTGRES_DB"`의 DB 이름을 `brew_market_neighborhood_check`로 바꿉니다.
+
+```sh
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1' < scripts/seed-suwon-boundaries.sql
+```
+
+빈 개발 DB에 처음 등록하면 `INSERT 0 44`가 출력됩니다. 이미 등록한 지역 코드는 건너뜁니다. 홈의 거래 동네 선택란에서 수원 행정동을 확인할 수 있으며, 인증하고 게시한 글은 해당 동네를 선택해 찾을 수 있습니다.
+
 ## API
 
 | 메서드 | 경로 | 동작 | 응답 |
