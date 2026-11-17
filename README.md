@@ -70,6 +70,26 @@ DB가 준비되면 애플리케이션을 실행합니다.
 
 DB를 중지할 때는 `docker compose down`을 실행합니다. 데이터는 named volume에 유지됩니다.
 
+### 동네 인증 개발용 경계 데이터
+
+동네 인증을 확인하려면 마이그레이션이 적용된 개발 DB에 동네 경계가 있어야 합니다. 표본은 [SGIS 2025년 2분기 행정동 경계](https://www.data.go.kr/data/15129688/fileData.do)에서 추출한 성수1가1동 한 곳입니다.
+
+별도 검증용 DB로 확인하려면 백엔드 저장소 루트의 Git Bash에서 다음 순서로 실행합니다. DB를 이미 만들었다면 첫 줄은 건너뜁니다.
+
+```sh
+docker compose exec -T db sh -c 'createdb -U "$POSTGRES_USER" brew_market_neighborhood_check'
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d brew_market_neighborhood_check -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS postgis;"'
+POSTGRES_DB=brew_market_neighborhood_check ./gradlew bootRun
+```
+
+백엔드가 검증용 DB에 연결되어 시작되면, 같은 폴더의 별도 터미널에서 경계를 등록합니다.
+
+```sh
+docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d brew_market_neighborhood_check -v ON_ERROR_STOP=1' < scripts/seed-seongsu-boundary.sql
+```
+
+처음 등록하면 `INSERT 0 1`이 출력됩니다. 같은 지역 코드가 이미 있으면 `INSERT 0 0`이 출력됩니다. 글쓰기 화면에서 성수1가1동 위치로 인증하고 글을 게시한 뒤, 상세 화면에 거래 동네 이름이 보이는지 확인합니다.
+
 ## API
 
 | 메서드 | 경로 | 동작 | 응답 |
