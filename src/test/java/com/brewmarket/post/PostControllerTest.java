@@ -135,13 +135,13 @@ class PostControllerTest {
                                 {"title":"새 제목","description":"새 설명","price":0}
                                 """))
                 .andExpect(status().isNoContent());
-        verify(postService).update(101L, 42L, "새 제목", "새 설명", 0L);
+        verify(postService).update(101L, 42L, "새 제목", "새 설명", 0L, null);
     }
 
     @Test
     void returnsForbiddenWhenUpdateServiceRejectsOwnership() throws Exception {
         doThrow(new PostAccessDeniedException()).when(postService)
-                .update(101L, 42L, "새 제목", "새 설명", 0L);
+                .update(101L, 42L, "새 제목", "새 설명", 0L, null);
 
         mockMvc.perform(patch("/posts/101")
                         .with(oidcLogin().oidcUser(authenticatedUser(42L)))
@@ -203,7 +203,7 @@ class PostControllerTest {
                 42L,
                 "머그컵",
                 "사용하지 않는 컵입니다.",
-                3000L
+                3000L, 7L
         )).thenReturn(101L);
 
         // 로그인 상태와 CSRF 토큰을 포함해 실제 컨트롤러에 요청
@@ -215,7 +215,8 @@ class PostControllerTest {
                                 {
                                     "title": "머그컵",
                                     "description": "사용하지 않는 컵입니다.",
-                                    "price": 3000
+                                    "price": 3000,
+                                    "neighborhoodId": 7
                                 }
                                 """))
                 // 생성 성공 상태와 서비스가 반환한 게시글 번호 확인
@@ -227,7 +228,7 @@ class PostControllerTest {
                 42L,
                 "머그컵",
                 "사용하지 않는 컵입니다.",
-                3000L
+                3000L, 7L
         );
     }
 

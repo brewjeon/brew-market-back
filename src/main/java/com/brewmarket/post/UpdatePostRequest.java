@@ -16,6 +16,10 @@ public record UpdatePostRequest(
 
         @NotNull(message = "가격은 필수입니다.")
         @PositiveOrZero(message = "가격은 0 이상이어야 합니다.")
-        Long price
+        Long price,
+        Long neighborhoodId
 ) {
+    public UpdatePostRequest(String title, String description, Long price) {
+        this(title, description, price, null);
+    }
 }

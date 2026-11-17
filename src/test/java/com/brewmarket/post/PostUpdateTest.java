@@ -14,6 +14,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
@@ -33,6 +34,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.oidcLogin;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -54,6 +56,8 @@ class PostUpdateTest {
     private UserRepository userRepository;
     @Autowired
     private PostRepository postRepository;
+    @Autowired
+    private JdbcTemplate jdbc;
 
     private User seller;
     private Post original;
@@ -65,9 +69,56 @@ class PostUpdateTest {
     @BeforeEach
     void preparePost() {
         seller = userRepository.saveAndFlush(new User(UUID.randomUUID() + "@example.com", "작성자"));
-        Post saved = postRepository.saveAndFlush(new Post(seller.getId(), "원래 제목", "원래 설명", 3000L));
+        Long neighborhoodId = jdbc.queryForObject("""
+                INSERT INTO brew_market.neighborhoods (code, name) VALUES (?, '테스트 동네') RETURNING id
+                """, Long.class, UUID.randomUUID().toString().replace("-", ""));
+        jdbc.update("""
+                INSERT INTO brew_market.user_neighborhood_verifications (user_id, neighborhood_id, expires_at)
+                VALUES (?, ?, now() + interval '1 day')
+                """, seller.getId(), neighborhoodId);
+        Post post = new Post(seller.getId(), "원래 제목", "원래 설명", 3000L);
+        post.selectNeighborhood(neighborhoodId);
+        Post saved = postRepository.saveAndFlush(post);
         original = postRepository.findById(saved.getId()).orElseThrow();
         assertNotNull(original.getCreatedAt());
+    }
+
+    @Test
+    void currentLocationEnablesPublicationUntilVerificationExpires() throws Exception {
+        Long candidate = jdbc.queryForObject("""
+                INSERT INTO brew_market.neighborhoods (code, name, boundary)
+                VALUES (?, '인증 테스트 동네', ST_Multi(ST_Transform(ST_MakeEnvelope(126.9, 37.5, 127.1, 37.6, 4326), 5179)))
+                RETURNING id
+                """, Long.class, UUID.randomUUID().toString().replace("-", ""));
+        String postBody = """
+                {"title":"새 글","description":"설명","price":0,"neighborhoodId":%d}
+                """.formatted(candidate);
+        var login = oidcLogin().oidcUser(authenticatedUser(seller.getId()));
+        try {
+            mockMvc.perform(post("/posts").with(login).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON).content(postBody))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(post("/neighborhoods/verify").with(login).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"latitude":37.55,"longitude":127.0,"accuracy":20}
+                                    """))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.id").value(candidate));
+            mockMvc.perform(get("/neighborhoods/verified").with(login))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$[?(@.id == %d)]".formatted(candidate)).exists());
+            mockMvc.perform(post("/posts").with(login).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON).content(postBody))
+                    .andExpect(status().isCreated());
+            jdbc.update("""
+                    UPDATE brew_market.user_neighborhood_verifications SET expires_at = now() - interval '1 minute'
+                    WHERE user_id = ? AND neighborhood_id = ?
+                    """, seller.getId(), candidate);
+            mockMvc.perform(post("/posts").with(login).with(csrf())
+                            .contentType(MediaType.APPLICATION_JSON).content(postBody))
+                    .andExpect(status().isForbidden());
+        } finally {
+            jdbc.update("UPDATE brew_market.neighborhoods SET boundary = NULL WHERE id = ?", candidate);
+        }
     }
 
     @Test
@@ -91,6 +142,7 @@ class PostUpdateTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("수정한 제목"))
                 .andExpect(jsonPath("$.description").value("수정한 설명"))
+                .andExpect(jsonPath("$.neighborhoodName").value("테스트 동네"))
                 .andExpect(jsonPath("$.price").value(0));
     }
 

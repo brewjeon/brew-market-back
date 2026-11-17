@@ -1,6 +1,7 @@
 package com.brewmarket.error;
 
 import com.brewmarket.post.PostNotFoundException;
+import com.brewmarket.neighborhood.NeighborhoodException;
 import com.brewmarket.post.PostAccessDeniedException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -15,6 +16,12 @@ import java.util.List;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(NeighborhoodException.class)
+    public ResponseEntity<ErrorResponse> handleNeighborhood(NeighborhoodException exception) {
+        return ResponseEntity.status(exception.status())
+                .body(new ErrorResponse("NEIGHBORHOOD_VERIFICATION", exception.getMessage(), List.of()));
+    }
 
     @ExceptionHandler(com.brewmarket.post.PostStatusConflictException.class)
     public ResponseEntity<ErrorResponse> handlePostStatusConflict(com.brewmarket.post.PostStatusConflictException exception) {

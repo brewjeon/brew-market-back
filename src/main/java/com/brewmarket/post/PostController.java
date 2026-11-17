@@ -64,7 +64,7 @@ public class PostController {
         }
 
         postService.update(postId, user.getUserId(),
-                request.title(), request.description(), request.price());
+                request.title(), request.description(), request.price(), request.neighborhoodId());
         return ResponseEntity.noContent().build();
     }
 
@@ -124,7 +124,8 @@ public class PostController {
                 user.getUserId(),
                 request.title(),
                 request.description(),
-                request.price()
+                request.price(),
+                request.neighborhoodId()
         );
 
         // 생성된 게시글 번호를 응답 본문에 담아 반환

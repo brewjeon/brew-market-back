@@ -15,6 +15,17 @@ public class Post {
     @Column(name = "seller_id", nullable = false, updatable = false)
     private Long sellerId;
 
+    @Column(name = "neighborhood_id")
+    private Long neighborhoodId;
+
+    public Long getNeighborhoodId() {
+        return neighborhoodId;
+    }
+
+    void selectNeighborhood(Long neighborhoodId) {
+        this.neighborhoodId = neighborhoodId;
+    }
+
     @Column(nullable = false, length = 100)
     private String title;
 

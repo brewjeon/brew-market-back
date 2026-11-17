@@ -1,6 +1,7 @@
 package com.brewmarket.post;
 
 import java.time.Instant;
+import com.brewmarket.neighborhood.NeighborhoodService;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
 import org.springframework.data.domain.PageRequest;
@@ -17,6 +18,7 @@ import java.util.List;
 public class PostService {
 
     private final UserRepository userRepository;
+    private final NeighborhoodService neighborhoods;
     private final PostRepository postRepository;
     private final PostImageRepository postImageRepository;
     private final ImageDeletionQueue imageDeletionQueue;
@@ -121,7 +123,7 @@ public class PostService {
     }
 
     @Transactional
-    public void update(Long postId, Long userId, String title, String description, Long price) {
+    public void update(Long postId, Long userId, String title, String description, Long price, Long neighborhoodId) {
         Post post = findActivePost(postId);
 
         if (!post.getSellerId().equals(userId)) {
@@ -129,7 +131,10 @@ public class PostService {
         }
 
         // 조회한 엔티티의 변경은 트랜잭션이 커밋될 때 DB에 반영됩니다.
+        Long selected = neighborhoodId == null ? post.getNeighborhoodId() : neighborhoodId;
+        neighborhoods.requireActive(userId, selected);
         post.updateContent(title, description, price);
+        post.selectNeighborhood(selected);
     }
 
     @Transactional(readOnly = true)
@@ -137,7 +142,8 @@ public class PostService {
         // 저장소의 기본 단건 조회 사용. 해당 게시글이 없으면 예외로 중단
         Post post = findActivePost(postId);
 
-        return PostDetailResponse.from(post, viewerId, postImageRepository.findByPostIdOrderByPositionAsc(postId));
+        return PostDetailResponse.from(post, viewerId, postImageRepository.findByPostIdOrderByPositionAsc(postId),
+                neighborhoods.findName(post.getNeighborhoodId()));
     }
 
     // 조회한 엔티티를 그대로 노출하지 않고 공개할 목록 정보로 변환
@@ -156,7 +162,18 @@ public class PostService {
             String description,
             Long price
     ) {
+        return savePost(sellerId, title, description, price, null);
+    }
+
+    @Transactional
+    public Long create(Long sellerId, String title, String description, Long price, Long neighborhoodId) {
+        neighborhoods.requireActive(sellerId, neighborhoodId);
+        return savePost(sellerId, title, description, price, neighborhoodId);
+    }
+
+    private Long savePost(Long sellerId, String title, String description, Long price, Long neighborhoodId) {
         Post post = new Post(sellerId, title, description, price);
+        post.selectNeighborhood(neighborhoodId);
 
         if (!userRepository.existsById(sellerId)) {
             throw new IllegalArgumentException("존재하지 않는 판매자입니다.");
