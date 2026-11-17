@@ -15,39 +15,30 @@ import java.util.Optional;
 public interface PostRepository extends JpaRepository<Post, Long> {
     @Query("""
             select p from Post p where p.deletedAt is null
-            and locate(lower(:keyword), lower(p.title)) > 0
+            and (:keyword = '' or locate(lower(:keyword), lower(p.title)) > 0)
+            and (:neighborhoodId is null or p.neighborhoodId = :neighborhoodId)
             order by p.createdAt desc, p.id desc
             """)
-    List<Post> searchFirst(
+    List<Post> findFirstPage(
             @Param("keyword") String keyword,
+            @Param("neighborhoodId") Long neighborhoodId,
             Pageable pageable
     );
 
     @Query("""
             select p from Post p where p.deletedAt is null
-            and locate(lower(:keyword), lower(p.title)) > 0
-            and (p.createdAt < :beforeTime or (p.createdAt = :beforeTime and p.id < :beforeId))
-            order by p.createdAt desc, p.id desc
-            """)
-    List<Post> searchNext(
-            @Param("keyword") String keyword,
-            @Param("beforeTime") Instant beforeTime,
-            @Param("beforeId") Long beforeId,
-            Pageable pageable
-    );
-
-    @Query("""
-            select p from Post p where p.deletedAt is null
+            and (:keyword = '' or locate(lower(:keyword), lower(p.title)) > 0)
+            and (:neighborhoodId is null or p.neighborhoodId = :neighborhoodId)
             and (p.createdAt < :beforeTime or (p.createdAt = :beforeTime and p.id < :beforeId))
             order by p.createdAt desc, p.id desc
             """)
     List<Post> findNextPage(
+            @Param("keyword") String keyword,
+            @Param("neighborhoodId") Long neighborhoodId,
             @Param("beforeTime") Instant beforeTime,
             @Param("beforeId") Long beforeId,
             Pageable pageable
     );
-
-    List<Post> findTop21ByDeletedAtIsNullOrderByCreatedAtDescIdDesc();
 
     List<Post> findBySellerIdAndDeletedAtIsNullOrderByCreatedAtDescIdDesc(Long sellerId, Pageable limit);
 

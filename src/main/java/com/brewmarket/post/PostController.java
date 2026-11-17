@@ -72,9 +72,10 @@ public class PostController {
     public PostPageResponse findPage(
             @RequestParam(value = "beforeTime", required = false) Instant beforeTime,
             @RequestParam(value = "beforeId", required = false) Long beforeId,
-            @RequestParam(value = "keyword", defaultValue = "") String keyword
+            @RequestParam(value = "keyword", defaultValue = "") String keyword,
+            @RequestParam(value = "neighborhoodId", required = false) Long neighborhoodId
     ) {
-        return postService.findPage(beforeTime, beforeId, keyword);
+        return postService.findPage(beforeTime, beforeId, keyword, neighborhoodId);
     }
 
     @GetMapping("/mine")

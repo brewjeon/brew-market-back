@@ -13,6 +13,11 @@ import org.springframework.web.bind.annotation.*;
 class NeighborhoodController {
     private final NeighborhoodService service;
 
+    @GetMapping
+    List<NeighborhoodService.ListedNeighborhood> list() {
+        return service.list();
+    }
+
     @GetMapping("/verified")
     List<NeighborhoodOption> active(@AuthenticationPrincipal BrewOidcUser user) {
         return service.active(userId(user));
