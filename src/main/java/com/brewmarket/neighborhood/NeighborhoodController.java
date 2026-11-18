@@ -23,6 +23,12 @@ class NeighborhoodController {
         return service.active(userId(user));
     }
 
+    @DeleteMapping("/verified/{neighborhoodId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void revoke(@AuthenticationPrincipal BrewOidcUser user, @PathVariable Long neighborhoodId) {
+        service.revoke(userId(user), neighborhoodId);
+    }
+
     @PostMapping("/verify")
     NeighborhoodOption verify(@AuthenticationPrincipal BrewOidcUser user, @RequestBody Location request) {
         if (request.latitude() == null || request.longitude() == null || request.accuracy() == null) {

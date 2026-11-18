@@ -33,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.oidcLogin;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -116,6 +117,55 @@ class PostUpdateTest {
                 .andExpect(jsonPath("$.hasNext").value(false));
         PostPageResponse all = postService.findPage(null, null, keyword);
         assertEquals(2, postService.findPage(all.nextCreatedAt(), all.nextId(), keyword).items().size());
+    }
+
+    @Test
+    void ownerCanReleaseVerificationSlotWhilePublishedPostRemainsVisible() throws Exception {
+        long originalNeighborhood = original.getNeighborhoodId();
+        User other = userRepository.saveAndFlush(new User(UUID.randomUUID() + "@example.com", "다른 회원"));
+        var ownerLogin = oidcLogin().oidcUser(authenticatedUser(seller.getId()));
+        var otherLogin = oidcLogin().oidcUser(authenticatedUser(other.getId()));
+        for (double longitude : new double[] {128.0, 129.0}) {
+            jdbc.update("""
+                    INSERT INTO brew_market.neighborhoods (code, name, boundary)
+                    VALUES (?, '추가 인증 테스트 동네', ST_Multi(ST_Transform(
+                        ST_MakeEnvelope(?, 35.95, ?, 36.05, 4326), 5179)))
+                    """, UUID.randomUUID().toString().replace("-", ""), longitude - 0.05, longitude + 0.05);
+        }
+        String firstLocation = """
+                {"latitude":36,"longitude":128,"accuracy":20}
+                """;
+        String secondLocation = """
+                {"latitude":36,"longitude":129,"accuracy":20}
+                """;
+        mockMvc.perform(delete("/neighborhoods/verified/{id}", originalNeighborhood).with(csrf()))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(delete("/neighborhoods/verified/{id}", originalNeighborhood).with(otherLogin).with(csrf()))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get("/neighborhoods/verified").with(ownerLogin))
+                .andExpect(jsonPath("$[?(@.id == %d)]".formatted(originalNeighborhood)).exists());
+        mockMvc.perform(post("/neighborhoods/verify").with(ownerLogin).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(firstLocation))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/neighborhoods/verify").with(ownerLogin).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(secondLocation))
+                .andExpect(status().isConflict());
+
+        for (int attempt = 0; attempt < 2; attempt++) {
+            mockMvc.perform(delete("/neighborhoods/verified/{id}", originalNeighborhood).with(ownerLogin).with(csrf()))
+                    .andExpect(status().isNoContent());
+        }
+        mockMvc.perform(get("/neighborhoods/verified").with(ownerLogin))
+                .andExpect(jsonPath("$[?(@.id == %d)]".formatted(originalNeighborhood)).doesNotExist());
+        mockMvc.perform(get("/posts/{id}", original.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.neighborhoodName").value("테스트 동네"));
+        mockMvc.perform(patch("/posts/{id}", original.getId()).with(ownerLogin).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(post("/neighborhoods/verify").with(ownerLogin).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(secondLocation))
+                .andExpect(status().isOk());
     }
 
     @Test
