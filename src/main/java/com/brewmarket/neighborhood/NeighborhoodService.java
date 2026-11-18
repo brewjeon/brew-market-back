@@ -2,9 +2,11 @@ package com.brewmarket.neighborhood;
 
 import com.brewmarket.user.UserRepository;
 import jakarta.persistence.EntityManager;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -21,7 +23,8 @@ public class NeighborhoodService {
     private final UserRepository users;
     private final EntityManager entityManager;
 
-    public record ListedNeighborhood(Long id, String name) {}
+    public record ListedNeighborhood(Long id, String name) {
+    }
 
     @Transactional(readOnly = true)
     public List<ListedNeighborhood> list() {
@@ -47,28 +50,45 @@ public class NeighborhoodService {
                 || !Double.isFinite(accuracy) || accuracy < 0 || accuracy > MAX_ACCURACY_METERS) {
             throw new NeighborhoodException(HttpStatus.BAD_REQUEST, "위치를 정확하게 확인할 수 없습니다. 다시 시도해 주세요.");
         }
+
         var matches = neighborhoods.findContaining(longitude, latitude);
+
         if (matches.size() != 1) {
             throw new NeighborhoodException(HttpStatus.BAD_REQUEST, "현재 위치에서 인증할 수 있는 동네를 찾지 못했습니다.");
         }
+
         var neighborhood = neighborhoods.findById(matches.getFirst()).orElseThrow();
-        users.findByIdForUpdate(userId)
-                .orElseThrow(() -> new NeighborhoodException(HttpStatus.UNAUTHORIZED, "다시 로그인해 주세요."));
+        lockMember(userId);
 
         Instant now = Instant.now();
         var key = new NeighborhoodVerification.Key(userId, neighborhood.id);
         var existing = verifications.findById(key).orElse(null);
+
         if ((existing == null || !existing.expiresAt.isAfter(now))
                 && verifications.countByIdUserIdAndExpiresAtAfter(userId, now) >= 2) {
             throw new NeighborhoodException(HttpStatus.CONFLICT, "동네는 최대 두 곳까지 인증할 수 있습니다.");
         }
+
         Instant expiresAt = now.plus(VALIDITY);
+
         if (existing == null) {
             entityManager.persist(new NeighborhoodVerification(key, expiresAt));
         } else {
             existing.expiresAt = expiresAt;
         }
+
         return new NeighborhoodOption(neighborhood.id, neighborhood.name, expiresAt);
+    }
+
+    @Transactional
+    public void revoke(Long userId, Long neighborhoodId) {
+        lockMember(userId);
+        verifications.deleteById(new NeighborhoodVerification.Key(userId, neighborhoodId));
+    }
+
+    private void lockMember(Long userId) {
+        users.findByIdForUpdate(userId)
+                .orElseThrow(() -> new NeighborhoodException(HttpStatus.UNAUTHORIZED, "다시 로그인해 주세요."));
     }
 
     public void requireActive(Long userId, Long neighborhoodId) {
