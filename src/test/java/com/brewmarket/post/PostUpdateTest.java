@@ -3,6 +3,7 @@ package com.brewmarket.post;
 import com.brewmarket.BrewMarketBackApplication;
 import com.brewmarket.auth.AuthenticatedUser;
 import com.brewmarket.auth.BrewOidcUser;
+import com.brewmarket.inquiry.InquiryService;
 import com.brewmarket.user.User;
 import com.brewmarket.user.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +15,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
@@ -25,6 +27,11 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
+import java.util.stream.IntStream;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -34,6 +41,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.oidcLogin;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -60,6 +68,8 @@ class PostUpdateTest {
     @Autowired
     private PostService postService;
     @Autowired
+    private InquiryService inquiries;
+    @Autowired
     private JdbcTemplate jdbc;
 
     private User seller;
@@ -84,6 +94,115 @@ class PostUpdateTest {
         Post saved = postRepository.saveAndFlush(post);
         original = postRepository.findById(saved.getId()).orElseThrow();
         assertNotNull(original.getCreatedAt());
+    }
+
+    @Test
+    void sellerCannotEditCompletedPostThroughJsonOrMultipart() throws Exception {
+        postService.changeStatus(original.getId(), seller.getId(), PostStatus.COMPLETED);
+        var login = oidcLogin().oidcUser(authenticatedUser(seller.getId()));
+        mockMvc.perform(patch("/posts/{id}", original.getId()).with(login).with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON).content(VALID_BODY))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("POST_STATUS_CONFLICT"));
+        mockMvc.perform(multipart(org.springframework.http.HttpMethod.PATCH, "/posts/{id}", original.getId())
+                        .file(new MockMultipartFile("post", "", "application/json",
+                                VALID_BODY.getBytes(StandardCharsets.UTF_8)))
+                        .param("removeImage", "true").with(login).with(csrf()))
+                .andExpect(status().isConflict()).andExpect(jsonPath("$.code").value("POST_STATUS_CONFLICT"));
+        Post saved = postRepository.findById(original.getId()).orElseThrow();
+        assertEquals(PostStatus.COMPLETED, saved.getStatus());
+        assertEquals(original.getTitle(), saved.getTitle());
+        assertEquals(original.getDescription(), saved.getDescription());
+        assertEquals(original.getPrice(), saved.getPrice());
+        assertEquals(original.getNeighborhoodId(), saved.getNeighborhoodId());
+    }
+
+    @Test
+    void oneRoomWinsConcurrentReservationAndStaleActionsCannotChangeIt() throws Exception {
+        var buyers = IntStream.range(0, 2)
+                .mapToObj(i -> userRepository.saveAndFlush(new User(UUID.randomUUID() + "@example.com", "구매자")))
+                .toList();
+        long first = inquiries.inquire(original.getId(), buyers.getFirst().getId(), "거래할 수 있나요?");
+        long second = inquiries.inquire(original.getId(), buyers.getLast().getId(), "구매하고 싶어요.");
+        long version = inquiries.reservation(first, seller.getId()).version();
+
+        mockMvc.perform(reservationChange(first, buyers.getFirst().getId(), "CONFIRM", version))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get("/inquiries/{id}/reservation", first)
+                        .with(oidcLogin().oidcUser(authenticatedUser(buyers.getLast().getId()))))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(patch("/posts/{id}/status", original.getId())
+                        .with(oidcLogin().oidcUser(authenticatedUser(seller.getId())))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"RESERVED\"}"))
+                .andExpect(status().isConflict());
+
+        var ready = new CountDownLatch(2);
+        var start = new CountDownLatch(1);
+        var executor = Executors.newFixedThreadPool(2);
+        int firstStatus;
+        int secondStatus;
+        try {
+            var a = executor.submit(() -> tryConfirm(first, version, ready, start));
+            var b = executor.submit(() -> tryConfirm(second, version, ready, start));
+            assertEquals(true, ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            firstStatus = a.get(15, TimeUnit.SECONDS);
+            secondStatus = b.get(15, TimeUnit.SECONDS);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+        assertEquals(java.util.List.of(204, 409), IntStream.of(firstStatus, secondStatus).sorted().boxed().toList());
+        long winner = firstStatus == 204 ? first : second;
+        long loser = winner == first ? second : first;
+        Post reserved = postRepository.findById(original.getId()).orElseThrow();
+        assertEquals(PostStatus.RESERVED, reserved.getStatus());
+        assertEquals(winner, reserved.getReservationRoomId());
+        assertEquals(InquiryService.ReservationState.RESERVED_ELSEWHERE,
+                inquiries.reservation(loser, seller.getId()).state());
+        assertEquals(null, PostDetailResponse.from(reserved, buyers.getFirst().getId()).reservationRoomId());
+
+        mockMvc.perform(delete("/posts/{id}", original.getId())
+                        .with(oidcLogin().oidcUser(authenticatedUser(seller.getId())))
+                        .with(csrf()))
+                .andExpect(status().isConflict());
+        long oldReservationVersion = inquiries.reservation(winner, seller.getId()).version();
+        mockMvc.perform(reservationChange(winner, seller.getId(), "CANCEL", oldReservationVersion))
+                .andExpect(status().isNoContent());
+        long available = inquiries.reservation(winner, seller.getId()).version();
+        mockMvc.perform(reservationChange(winner, seller.getId(), "CONFIRM", available))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(reservationChange(winner, seller.getId(), "CANCEL", oldReservationVersion))
+                .andExpect(status().isConflict());
+        long current = inquiries.reservation(winner, seller.getId()).version();
+        mockMvc.perform(reservationChange(winner, seller.getId(), "COMPLETE", current))
+                .andExpect(status().isNoContent());
+        assertEquals(InquiryService.ReservationState.COMPLETED_HERE,
+                inquiries.reservation(winner, seller.getId()).state());
+
+        mockMvc.perform(delete("/posts/{id}", original.getId())
+                        .with(oidcLogin().oidcUser(authenticatedUser(seller.getId())))
+                        .with(csrf()))
+                .andExpect(status().isNoContent());
+        assertEquals(InquiryService.ReservationState.UNAVAILABLE,
+                inquiries.reservation(winner, seller.getId()).state());
+    }
+
+    private int tryConfirm(long roomId, long version, CountDownLatch ready, CountDownLatch start) throws Exception {
+        ready.countDown();
+        if (!start.await(5, TimeUnit.SECONDS)) throw new IllegalStateException("예약 테스트 시작 신호가 없습니다.");
+        return mockMvc.perform(reservationChange(roomId, seller.getId(), "CONFIRM", version))
+                .andReturn().getResponse().getStatus();
+    }
+
+    private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder reservationChange(
+            long roomId, long userId, String action, long version) {
+        return patch("/inquiries/{id}/reservation", roomId)
+                .with(oidcLogin().oidcUser(authenticatedUser(userId)))
+                .with(csrf())
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"action\":\"%s\",\"version\":%d}".formatted(action, version));
     }
 
     @Test

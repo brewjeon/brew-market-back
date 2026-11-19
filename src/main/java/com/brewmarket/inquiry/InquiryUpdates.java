@@ -1,6 +1,7 @@
 package com.brewmarket.inquiry;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -11,6 +12,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @Component
 class InquiryUpdates {
     record RoomChanged(long roomId, long buyerId, long sellerId) {}
+    record ReservationChanged(List<Long> roomIds) {}
     private record Channel(long id, boolean roomList) {}
 
     private final ConcurrentHashMap<Channel, Set<SseEmitter>> subscriptions = new ConcurrentHashMap<>();
@@ -45,6 +47,11 @@ class InquiryUpdates {
         notifyChannel(new Channel(change.roomId(), false));
         notifyChannel(new Channel(change.buyerId(), true));
         notifyChannel(new Channel(change.sellerId(), true));
+    }
+
+    @TransactionalEventListener
+    public void reservationChanged(ReservationChanged change) {
+        change.roomIds().forEach(roomId -> notifyChannel(new Channel(roomId, false)));
     }
 
     private void notifyChannel(Channel channel) {

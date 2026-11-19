@@ -3,6 +3,7 @@ package com.brewmarket.error;
 import com.brewmarket.post.PostNotFoundException;
 import com.brewmarket.neighborhood.NeighborhoodException;
 import com.brewmarket.post.PostAccessDeniedException;
+import com.brewmarket.post.PostReservationConflictException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -16,6 +17,12 @@ import java.util.List;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(PostReservationConflictException.class)
+    public ResponseEntity<ErrorResponse> handlePostReservationConflict(PostReservationConflictException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ErrorResponse("POST_RESERVATION_CONFLICT", exception.getMessage(), List.of()));
+    }
 
     @ExceptionHandler(NeighborhoodException.class)
     public ResponseEntity<ErrorResponse> handleNeighborhood(NeighborhoodException exception) {
