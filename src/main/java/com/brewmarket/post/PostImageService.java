@@ -58,6 +58,7 @@ public class PostImageService {
     @Transactional
     public void replacePost(Long id, List<MultipartFile> files, List<String> order) {
         Post post = repository.findByIdAndDeletedAtIsNull(id).orElseThrow(PostNotFoundException::new);
+        post.requireEditable();
         List<PostImage> before = images.findByPostIdOrderByPositionAsc(id);
         List<String> oldKeys = before.stream().map(PostImage::getImageKey).toList();
         List<String> next = compose(oldKeys, files, order);

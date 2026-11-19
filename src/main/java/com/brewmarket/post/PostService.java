@@ -84,21 +84,29 @@ public class PostService {
 
     @Transactional
     public void changeStatus(Long postId, Long userId, PostStatus status) {
-        Post post = findActivePost(postId);
+        Post post = findActivePostForUpdate(postId);
 
         if (!post.getSellerId().equals(userId)) {
             throw new PostAccessDeniedException();
         }
 
+        if (post.getStatus() != PostStatus.COMPLETED && post.getStatus() != status
+                && (post.hasSelectedReservation() || status == PostStatus.RESERVED)) {
+            throw new PostReservationConflictException("대화방에서 예약을 확인하거나 변경해 주세요.");
+        }
         post.changeStatus(status);
     }
 
     @Transactional
     public void delete(Long postId, Long userId) {
-        Post post = findActivePost(postId);
+        Post post = findActivePostForUpdate(postId);
 
         if (!post.getSellerId().equals(userId)) {
             throw new PostAccessDeniedException();
+        }
+
+        if (post.hasSelectedReservation() && post.getStatus() == PostStatus.RESERVED) {
+            throw new PostReservationConflictException("예약을 취소하거나 거래를 완료한 뒤 게시글을 삭제해 주세요.");
         }
 
         var keys = postImageRepository.findByPostIdOrderByPositionAsc(postId).stream()
@@ -115,14 +123,21 @@ public class PostService {
                 .orElseThrow(PostNotFoundException::new);
     }
 
+    private Post findActivePostForUpdate(Long postId) {
+        return postRepository.findByIdForUpdate(postId)
+                .filter(post -> post.getDeletedAt() == null)
+                .orElseThrow(PostNotFoundException::new);
+    }
+
     @Transactional
     public void update(Long postId, Long userId, String title, String description, Long price, Long neighborhoodId) {
-        Post post = findActivePost(postId);
+        Post post = findActivePostForUpdate(postId);
 
         if (!post.getSellerId().equals(userId)) {
             throw new PostAccessDeniedException();
         }
 
+        post.requireEditable();
         // 조회한 엔티티의 변경은 트랜잭션이 커밋될 때 DB에 반영됩니다.
         Long selected = neighborhoodId == null ? post.getNeighborhoodId() : neighborhoodId;
         neighborhoods.requireActive(userId, selected);

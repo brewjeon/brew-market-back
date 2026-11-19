@@ -3,6 +3,7 @@ package com.brewmarket.post;
 import jakarta.persistence.*;
 
 import java.time.Instant;
+import java.util.Objects;
 
 @Entity
 @Table(name = "posts")
@@ -23,6 +24,7 @@ public class Post {
     }
 
     void selectNeighborhood(Long neighborhoodId) {
+        requireEditable();
         this.neighborhoodId = neighborhoodId;
     }
 
@@ -55,6 +57,9 @@ public class Post {
     @Column(nullable = false)
     private Long version;
 
+    @Column(name = "reservation_room_id")
+    private Long reservationRoomId;
+
     @Column(name = "image_key", length = 100)
     private String imageKey;
 
@@ -63,7 +68,7 @@ public class Post {
     }
 
     public void changeImage(String key) {
-        if (deletedAt != null) throw new PostNotFoundException();
+        requireEditable();
         imageKey = key;
     }
 
@@ -74,6 +79,47 @@ public class Post {
         if (status == nextStatus) return;
         if (status == PostStatus.COMPLETED) throw new PostStatusConflictException();
         status = nextStatus;
+    }
+
+    public Long getVersion() {
+        return version;
+    }
+
+    public boolean hasSelectedReservation() {
+        return reservationRoomId != null;
+    }
+
+    Long getReservationRoomId() {
+        return reservationRoomId;
+    }
+
+    public boolean isReservedFor(long roomId) {
+        return Objects.equals(reservationRoomId, roomId);
+    }
+
+    public void reserveFor(long roomId) {
+        if (status != PostStatus.FOR_SALE) {
+            throw new PostReservationConflictException("판매 중인 글만 예약할 수 있습니다.");
+        }
+        changeStatus(PostStatus.RESERVED);
+        reservationRoomId = roomId;
+    }
+
+    public void cancelReservation(long roomId) {
+        requireActiveReservation(roomId);
+        changeStatus(PostStatus.FOR_SALE);
+        reservationRoomId = null;
+    }
+
+    public void completeReservation(long roomId) {
+        requireActiveReservation(roomId);
+        changeStatus(PostStatus.COMPLETED);
+    }
+
+    private void requireActiveReservation(long roomId) {
+        if (status != PostStatus.RESERVED || !isReservedFor(roomId)) {
+            throw new PostReservationConflictException("이 대화의 진행 중인 예약을 찾을 수 없습니다.");
+        }
     }
 
     public Instant getDeletedAt() {
@@ -102,14 +148,19 @@ public class Post {
     }
 
     public void updateContent(String title, String description, Long price) {
-        if (deletedAt != null) {
-            throw new PostNotFoundException();
-        }
+        requireEditable();
         // 모든 값을 검증한 뒤 변경해 잘못된 입력으로 일부 필드만 바뀌지 않게 합니다.
         validateContent(title, description, price);
         this.title = title;
         this.description = description;
         this.price = price;
+    }
+
+    void requireEditable() {
+        if (deletedAt != null) throw new PostNotFoundException();
+        if (status == PostStatus.COMPLETED) {
+            throw new PostStatusConflictException("거래 완료된 게시글은 수정할 수 없습니다.");
+        }
     }
 
     private static void validateContent(String title, String description, Long price) {

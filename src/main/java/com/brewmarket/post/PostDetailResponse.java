@@ -14,17 +14,18 @@ public record PostDetailResponse(
         String imageUrl,
         java.util.List<String> imageUrls,
         Long neighborhoodId,
-        String neighborhoodName
+        String neighborhoodName,
+        Long reservationRoomId
 ) {
     public PostDetailResponse(Long id, String title, String description, Long price,
                               PostStatus status, Instant createdAt, boolean canManage) {
-        this(id, title, description, price, status, createdAt, canManage, null, java.util.List.of(), null, null);
+        this(id, title, description, price, status, createdAt, canManage, null, java.util.List.of(), null, null, null);
     }
 
     public PostDetailResponse(Long id, String title, String description, Long price,
                               PostStatus status, Instant createdAt, boolean canManage, String imageUrl) {
         this(id, title, description, price, status, createdAt, canManage, imageUrl,
-                imageUrl == null ? java.util.List.of() : java.util.List.of(imageUrl), null, null);
+                imageUrl == null ? java.util.List.of() : java.util.List.of(imageUrl), null, null, null);
     }
 
     public static PostDetailResponse from(Post post, Long viewerId) {
@@ -39,7 +40,8 @@ public record PostDetailResponse(
                 post.getImageKey() == null ? null : "/posts/" + post.getId() + "/image",
                 post.getImageKey() == null ? java.util.List.of() : java.util.List.of("/posts/" + post.getId() + "/image"),
                 post.getNeighborhoodId(),
-                null
+                null,
+                sellerReservationRoom(post, viewerId)
         );
     }
 
@@ -49,6 +51,11 @@ public record PostDetailResponse(
                 .mapToObj(i -> "/posts/" + post.getId() + "/images/" + i).toList();
         return new PostDetailResponse(post.getId(), post.getTitle(), post.getDescription(), post.getPrice(),
                 post.getStatus(), post.getCreatedAt(), viewerId != null && post.getSellerId().equals(viewerId),
-                urls.isEmpty() ? null : urls.get(0), urls, post.getNeighborhoodId(), neighborhoodName);
+                urls.isEmpty() ? null : urls.get(0), urls, post.getNeighborhoodId(), neighborhoodName,
+                sellerReservationRoom(post, viewerId));
+    }
+
+    private static Long sellerReservationRoom(Post post, Long viewerId) {
+        return post.getSellerId().equals(viewerId) ? post.getReservationRoomId() : null;
     }
 }
