@@ -11,6 +11,7 @@ import com.brewmarket.user.UserRepository;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
@@ -128,6 +129,11 @@ public class PostService {
     private Post findActivePost(Long postId) {
         return postRepository.findByIdAndDeletedAtIsNull(postId)
                 .orElseThrow(PostNotFoundException::new);
+    }
+
+    public SseEmitter subscribeTradeStatus(Long postId) {
+        findActivePost(postId);
+        return inquiryUpdates.subscribePost(postId);
     }
 
     private Post findActivePostForUpdate(Long postId) {

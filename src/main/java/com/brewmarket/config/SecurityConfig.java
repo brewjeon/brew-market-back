@@ -41,7 +41,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/users").permitAll()
 
                         // 게시글 목록과 단건 상세는 로그인 없이 조회 가능
-                        .requestMatchers(HttpMethod.GET, "/posts", "/posts/{postId}", "/posts/{postId}/image", "/posts/{postId}/images/{index}").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/posts", "/posts/{postId}", "/posts/{postId}/image", "/posts/{postId}/images/{index}", "/posts/{postId}/trade-events").permitAll()
                         .requestMatchers("/drafts", "/drafts/**").authenticated()
                         .requestMatchers("/inquiries", "/inquiries/**").authenticated()
                         .requestMatchers("/favorites", "/favorites/**").authenticated()

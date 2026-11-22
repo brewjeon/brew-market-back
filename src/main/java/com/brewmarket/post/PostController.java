@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
 
@@ -26,6 +27,11 @@ import java.util.List;
 @RequestMapping("/posts")
 @RequiredArgsConstructor
 public class PostController {
+
+    @GetMapping(value = "/{postId}/trade-events", produces = "text/event-stream")
+    public SseEmitter tradeEvents(@PathVariable("postId") Long postId) {
+        return postService.subscribeTradeStatus(postId);
+    }
 
     // 게시글 조회와 등록에 사용할 서비스 객체의 참조 보관
     private final PostService postService;
