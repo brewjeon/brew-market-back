@@ -4,18 +4,30 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 @Component
-class InquiryUpdates {
+@RequiredArgsConstructor
+public class InquiryUpdates {
     record RoomChanged(long roomId, long buyerId, long sellerId) {}
-    record ReservationChanged(List<Long> roomIds) {}
+    private record ReservationChanged(List<Long> roomIds) {}
     private record Channel(long id, boolean roomList) {}
 
     private final ConcurrentHashMap<Channel, Set<SseEmitter>> subscriptions = new ConcurrentHashMap<>();
+    private final InquiryRoomRepository rooms;
+    private final ApplicationEventPublisher events;
+
+    public void publishReservationChange(long postId) {
+        var roomIds = rooms.findRoomIdsByPostId(postId);
+        if (!roomIds.isEmpty()) {
+            events.publishEvent(new ReservationChanged(roomIds));
+        }
+    }
 
     SseEmitter subscribe(long roomId) {
         return subscribe(new Channel(roomId, false));

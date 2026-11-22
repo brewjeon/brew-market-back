@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
@@ -21,8 +22,11 @@ import org.testcontainers.postgresql.PostgreSQLContainer;
 import org.testcontainers.utility.DockerImageName;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.oidcLogin;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -73,6 +77,42 @@ class InquiryUpdatesTest {
 
     private long createUser() {
         return users.save(new User(UUID.randomUUID() + "@example.com", "테스트 회원")).getId();
+    }
+
+    @Test
+    void postStatusChangeUpdatesOnlyRoomsForThatPost() throws Exception {
+        long seller = createUser();
+        long buyer = createUser();
+        long post = posts.create(seller, "머그컵", "판매합니다", 1000L);
+        long otherPost = posts.create(seller, "책장", "판매합니다", 1000L);
+        long room = inquiries.inquire(post, buyer, "머그컵 문의");
+        long otherRoom = inquiries.inquire(otherPost, buyer, "책장 문의");
+
+        var subscription = mockMvc.perform(get("/inquiries/{id}/events", room)
+                        .with(oidcLogin().oidcUser(member(buyer))))
+                .andExpect(request().asyncStarted()).andReturn();
+        var otherSubscription = mockMvc.perform(get("/inquiries/{id}/events", otherRoom)
+                        .with(oidcLogin().oidcUser(member(buyer))))
+                .andExpect(request().asyncStarted()).andReturn();
+        try {
+            for (int attempt = 0; attempt < 2; attempt++) {
+                mockMvc.perform(patch("/posts/{id}/status", post)
+                                .with(oidcLogin().oidcUser(member(seller))).with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content("{\"status\":\"COMPLETED\"}"))
+                        .andExpect(status().isNoContent());
+            }
+
+            assertEquals(1, changeCount(subscription.getResponse().getContentAsString()));
+            assertEquals(0, changeCount(otherSubscription.getResponse().getContentAsString()));
+            mockMvc.perform(get("/inquiries/{id}/reservation", room)
+                            .with(oidcLogin().oidcUser(member(buyer))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.state").value("COMPLETED"));
+        } finally {
+            subscription.getRequest().getAsyncContext().complete();
+            otherSubscription.getRequest().getAsyncContext().complete();
+        }
     }
 
     @Test

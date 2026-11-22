@@ -1,6 +1,7 @@
 package com.brewmarket.post;
 
 import java.time.Instant;
+import com.brewmarket.inquiry.InquiryUpdates;
 import com.brewmarket.neighborhood.NeighborhoodService;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.http.HttpStatus;
@@ -22,6 +23,7 @@ public class PostService {
     private final PostRepository postRepository;
     private final PostImageRepository postImageRepository;
     private final ImageDeletionQueue imageDeletionQueue;
+    private final InquiryUpdates inquiryUpdates;
 
     @Transactional(readOnly = true)
     public PostPageResponse findPage(Instant beforeTime, Long beforeId) {
@@ -94,7 +96,12 @@ public class PostService {
                 && (post.hasSelectedReservation() || status == PostStatus.RESERVED)) {
             throw new PostReservationConflictException("대화방에서 예약을 확인하거나 변경해 주세요.");
         }
+
+        PostStatus previous = post.getStatus();
         post.changeStatus(status);
+        if (previous != post.getStatus()) {
+            inquiryUpdates.publishReservationChange(postId);
+        }
     }
 
     @Transactional

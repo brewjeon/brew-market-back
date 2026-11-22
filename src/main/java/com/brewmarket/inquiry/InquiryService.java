@@ -20,17 +20,20 @@ public class InquiryService {
     private final InquiryRoomRepository roomRepository;
     private final InquiryMessageRepository messageRepository;
     private final ApplicationEventPublisher events;
+    private final InquiryUpdates updates;
 
     public InquiryService(
             PostRepository postRepository,
             InquiryRoomRepository roomRepository,
             InquiryMessageRepository messageRepository,
-            ApplicationEventPublisher events
+            ApplicationEventPublisher events,
+            InquiryUpdates updates
     ) {
         this.postRepository = postRepository;
         this.roomRepository = roomRepository;
         this.messageRepository = messageRepository;
         this.events = events;
+        this.updates = updates;
     }
 
     public record Room(long id, Long postId, String title, String lastMessage,
@@ -71,7 +74,7 @@ public class InquiryService {
             case CANCEL -> post.cancelReservation(roomId);
             case COMPLETE -> post.completeReservation(roomId);
         }
-        events.publishEvent(new InquiryUpdates.ReservationChanged(roomRepository.findRoomIdsByPostId(room.postId)));
+        updates.publishReservationChange(room.postId);
     }
 
     private Reservation toReservation(Post post, InquiryRoom room, long userId) {
