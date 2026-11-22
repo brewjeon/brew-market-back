@@ -15,26 +15,28 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @RequiredArgsConstructor
 public class InquiryUpdates {
     record RoomChanged(long roomId, long buyerId, long sellerId) {}
-    private record ReservationChanged(List<Long> roomIds) {}
-    private record Channel(long id, boolean roomList) {}
+    private record ReservationChanged(long postId, List<Long> roomIds) {}
+    private enum ChannelType { ROOM, ROOM_LIST, POST }
+    private record Channel(long id, ChannelType type) {}
 
     private final ConcurrentHashMap<Channel, Set<SseEmitter>> subscriptions = new ConcurrentHashMap<>();
     private final InquiryRoomRepository rooms;
     private final ApplicationEventPublisher events;
 
     public void publishReservationChange(long postId) {
-        var roomIds = rooms.findRoomIdsByPostId(postId);
-        if (!roomIds.isEmpty()) {
-            events.publishEvent(new ReservationChanged(roomIds));
-        }
+        events.publishEvent(new ReservationChanged(postId, rooms.findRoomIdsByPostId(postId)));
     }
 
     SseEmitter subscribe(long roomId) {
-        return subscribe(new Channel(roomId, false));
+        return subscribe(new Channel(roomId, ChannelType.ROOM));
     }
 
     SseEmitter subscribeList(long userId) {
-        return subscribe(new Channel(userId, true));
+        return subscribe(new Channel(userId, ChannelType.ROOM_LIST));
+    }
+
+    public SseEmitter subscribePost(long postId) {
+        return subscribe(new Channel(postId, ChannelType.POST));
     }
 
     private SseEmitter subscribe(Channel channel) {
@@ -56,14 +58,15 @@ public class InquiryUpdates {
 
     @TransactionalEventListener
     public void roomChanged(RoomChanged change) {
-        notifyChannel(new Channel(change.roomId(), false));
-        notifyChannel(new Channel(change.buyerId(), true));
-        notifyChannel(new Channel(change.sellerId(), true));
+        notifyChannel(new Channel(change.roomId(), ChannelType.ROOM));
+        notifyChannel(new Channel(change.buyerId(), ChannelType.ROOM_LIST));
+        notifyChannel(new Channel(change.sellerId(), ChannelType.ROOM_LIST));
     }
 
     @TransactionalEventListener
     public void reservationChanged(ReservationChanged change) {
-        change.roomIds().forEach(roomId -> notifyChannel(new Channel(roomId, false)));
+        notifyChannel(new Channel(change.postId(), ChannelType.POST));
+        change.roomIds().forEach(roomId -> notifyChannel(new Channel(roomId, ChannelType.ROOM)));
     }
 
     private void notifyChannel(Channel channel) {
