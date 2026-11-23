@@ -37,7 +37,7 @@ public class InquiryService {
     }
 
     public record Room(long id, Long postId, String title, String lastMessage,
-                       long lastMessageId, boolean unread, long unreadCount) {}
+                       long lastMessageId, boolean unread, long unreadCount, boolean reservationConfirmed) {}
     public record Message(long id, long senderId, String content) {}
     public record RoomPage(List<Room> rooms, Long nextBefore, long unreadRoomCount) {}
     public enum ReservationState { AVAILABLE, RESERVED_HERE, RESERVED_ELSEWHERE, LEGACY_RESERVED, COMPLETED_HERE, COMPLETED, UNAVAILABLE }
@@ -149,7 +149,7 @@ public class InquiryService {
         List<Room> rooms = page.stream().map(row -> {
             long count = unreadCounts.getOrDefault(row.getRoomId(), 0L);
             return new Room(row.getRoomId(), row.getPostId(), row.getTitle(), row.getContent(),
-                    row.getMessageId(), count > 0, count);
+                    row.getMessageId(), count > 0, count, row.getReservationConfirmed());
         }).toList();
         return new RoomPage(rooms, rows.size() > 10 ? rooms.getLast().lastMessageId() : null, unreadRoomCount);
     }
