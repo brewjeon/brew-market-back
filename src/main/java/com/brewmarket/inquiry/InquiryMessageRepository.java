@@ -24,11 +24,16 @@ interface InquiryMessageRepository extends JpaRepository<InquiryMessage, Long> {
         String getTitle();
         String getContent();
         long getMessageId();
+        boolean getReservationConfirmed();
     }
 
     @Query("""
             select r.id as roomId, p.id as postId, coalesce(p.title, r.postTitle) as title,
-                   m.content as content, m.id as messageId
+                   m.content as content, m.id as messageId,
+                   case when p.deletedAt is null
+                             and p.status = com.brewmarket.post.PostStatus.RESERVED
+                             and p.reservationRoomId = r.id
+                        then true else false end as reservationConfirmed
             from InquiryMessage m join m.room r left join Post p on p.id = r.postId
             where (r.buyerId = :userId or r.sellerId = :userId)
               and m.id < :before

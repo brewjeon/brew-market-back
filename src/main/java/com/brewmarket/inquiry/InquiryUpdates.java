@@ -1,6 +1,7 @@
 package com.brewmarket.inquiry;
 
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -15,7 +16,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @RequiredArgsConstructor
 public class InquiryUpdates {
     record RoomChanged(long roomId, long buyerId, long sellerId) {}
-    private record ReservationChanged(long postId, List<Long> roomIds) {}
+    private record ReservationChanged(long postId, List<RoomChanged> rooms) {}
     private enum ChannelType { ROOM, ROOM_LIST, POST }
     private record Channel(long id, ChannelType type) {}
 
@@ -24,7 +25,10 @@ public class InquiryUpdates {
     private final ApplicationEventPublisher events;
 
     public void publishReservationChange(long postId) {
-        events.publishEvent(new ReservationChanged(postId, rooms.findRoomIdsByPostId(postId)));
+        var affectedRooms = rooms.findRoomParticipantIdsByPostId(postId).stream()
+                .map(room -> new RoomChanged(room.getRoomId(), room.getBuyerId(), room.getSellerId()))
+                .toList();
+        events.publishEvent(new ReservationChanged(postId, affectedRooms));
     }
 
     SseEmitter subscribe(long roomId) {
@@ -66,7 +70,13 @@ public class InquiryUpdates {
     @TransactionalEventListener
     public void reservationChanged(ReservationChanged change) {
         notifyChannel(new Channel(change.postId(), ChannelType.POST));
-        change.roomIds().forEach(roomId -> notifyChannel(new Channel(roomId, ChannelType.ROOM)));
+        Set<Long> participantIds = new HashSet<>();
+        for (var room : change.rooms()) {
+            notifyChannel(new Channel(room.roomId(), ChannelType.ROOM));
+            participantIds.add(room.buyerId());
+            participantIds.add(room.sellerId());
+        }
+        participantIds.forEach(userId -> notifyChannel(new Channel(userId, ChannelType.ROOM_LIST)));
     }
 
     private void notifyChannel(Channel channel) {
