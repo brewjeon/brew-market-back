@@ -28,6 +28,8 @@ import org.testcontainers.utility.DockerImageName;
 
 import java.util.UUID;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.stream.IntStream;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -161,6 +163,8 @@ class PostUpdateTest {
         assertEquals(winner, reserved.getReservationRoomId());
         assertEquals(InquiryService.ReservationState.RESERVED_ELSEWHERE,
                 inquiries.reservation(loser, seller.getId()).state());
+        assertEquals("성수역 2번 출구", inquiries.reservation(winner, seller.getId()).meetingPlace());
+        assertEquals(null, inquiries.reservation(loser, seller.getId()).meetingPlace());
         assertEquals(null, PostDetailResponse.from(reserved, buyers.getFirst().getId()).reservationRoomId());
 
         mockMvc.perform(delete("/posts/{id}", original.getId())
@@ -170,6 +174,7 @@ class PostUpdateTest {
         long oldReservationVersion = inquiries.reservation(winner, seller.getId()).version();
         mockMvc.perform(reservationChange(winner, seller.getId(), "CANCEL", oldReservationVersion))
                 .andExpect(status().isNoContent());
+        assertEquals(null, inquiries.reservation(winner, seller.getId()).meetingAt());
         long available = inquiries.reservation(winner, seller.getId()).version();
         mockMvc.perform(reservationChange(winner, seller.getId(), "CONFIRM", available))
                 .andExpect(status().isNoContent());
@@ -180,6 +185,7 @@ class PostUpdateTest {
                 .andExpect(status().isNoContent());
         assertEquals(InquiryService.ReservationState.COMPLETED_HERE,
                 inquiries.reservation(winner, seller.getId()).state());
+        assertEquals(null, inquiries.reservation(winner, seller.getId()).meetingPlace());
 
         mockMvc.perform(delete("/posts/{id}", original.getId())
                         .with(oidcLogin().oidcUser(authenticatedUser(seller.getId())))
@@ -198,11 +204,16 @@ class PostUpdateTest {
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder reservationChange(
             long roomId, long userId, String action, long version) {
+        String body = "CONFIRM".equals(action)
+                ? """
+                  {"action":"CONFIRM","version":%d,"meetingAt":"%s","meetingPlace":" 성수역 2번 출구 "}
+                  """.formatted(version, Instant.now().plus(1, ChronoUnit.DAYS))
+                : "{\"action\":\"%s\",\"version\":%d}".formatted(action, version);
         return patch("/inquiries/{id}/reservation", roomId)
                 .with(oidcLogin().oidcUser(authenticatedUser(userId)))
                 .with(csrf())
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"action\":\"%s\",\"version\":%d}".formatted(action, version));
+                .content(body);
     }
 
     @Test

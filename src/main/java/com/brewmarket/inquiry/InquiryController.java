@@ -4,6 +4,7 @@ import com.brewmarket.auth.BrewOidcUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
+import java.time.Instant;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -30,7 +31,8 @@ public class InquiryController {
     public record ReadRequest(Long messageId) {}
     public record ReadState(long peerLastReadId) {}
     public record ReservationRequest(@NotNull InquiryService.ReservationAction action,
-                                     @NotNull @PositiveOrZero Long version) {}
+                                     @NotNull @PositiveOrZero Long version,
+                                     Instant meetingAt, String meetingPlace) {}
 
     @GetMapping("/{id}/reservation")
     public InquiryService.Reservation reservation(@AuthenticationPrincipal BrewOidcUser user,
@@ -42,7 +44,8 @@ public class InquiryController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void changeReservation(@AuthenticationPrincipal BrewOidcUser user, @PathVariable("id") long id,
                                   @Valid @RequestBody ReservationRequest request) {
-        service.changeReservation(id, userId(user), request.action(), request.version());
+        service.changeReservation(id, userId(user), request.action(), request.version(),
+                request.meetingAt(), request.meetingPlace());
     }
 
     @GetMapping(value = "/{id}/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
