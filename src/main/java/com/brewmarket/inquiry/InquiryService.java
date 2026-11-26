@@ -45,7 +45,7 @@ public class InquiryService {
     public record Message(long id, long senderId, String content) {}
     public record RoomPage(List<Room> rooms, Long nextBefore, long unreadRoomCount) {}
     public enum ReservationState { AVAILABLE, RESERVED_HERE, RESERVED_ELSEWHERE, LEGACY_RESERVED, COMPLETED_HERE, COMPLETED, UNAVAILABLE }
-    public enum ReservationAction { CONFIRM, CANCEL, COMPLETE }
+    public enum ReservationAction { CONFIRM, RESCHEDULE, CANCEL, COMPLETE }
     public record Reservation(ReservationState state, Long version, Instant meetingAt, String meetingPlace) {}
 
     @Transactional(readOnly = true)
@@ -75,20 +75,28 @@ public class InquiryService {
             throw new PostReservationConflictException("게시글 상태가 변경되었습니다. 확인한 뒤 다시 시도해 주세요.");
         }
         switch (action) {
-            case CONFIRM -> {
-                if (meetingAt == null || !meetingAt.isAfter(Instant.now()) || meetingAt.isAfter(MAX_MEETING_AT)) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "현재보다 늦은 약속 시간을 입력해 주세요.");
+            case CONFIRM -> post.reserveFor(roomId, meetingAt, validateMeetingDetails(meetingAt, meetingPlace));
+            case RESCHEDULE -> {
+                if (post.rescheduleReservation(roomId, meetingAt, validateMeetingDetails(meetingAt, meetingPlace))) {
+                    events.publishEvent(new InquiryUpdates.MeetingChanged(roomId));
                 }
-                String place = meetingPlace == null ? "" : meetingPlace.strip();
-                if (place.isEmpty() || place.length() > MAX_MEETING_PLACE_LENGTH) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "만날 장소를 200자 이내로 입력해 주세요.");
-                }
-                post.reserveFor(roomId, meetingAt, place);
+                return;
             }
             case CANCEL -> post.cancelReservation(roomId);
             case COMPLETE -> post.completeReservation(roomId);
         }
         updates.publishReservationChange(room.postId);
+    }
+
+    private String validateMeetingDetails(Instant meetingAt, String meetingPlace) {
+        if (meetingAt == null || !meetingAt.isAfter(Instant.now()) || meetingAt.isAfter(MAX_MEETING_AT)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "현재보다 늦은 약속 시간을 입력해 주세요.");
+        }
+        String place = meetingPlace == null ? "" : meetingPlace.strip();
+        if (place.isEmpty() || place.length() > MAX_MEETING_PLACE_LENGTH) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "만날 장소를 200자 이내로 입력해 주세요.");
+        }
+        return place;
     }
 
     private Reservation toReservation(Post post, InquiryRoom room, long userId) {

@@ -125,6 +125,16 @@ public class Post {
         this.meetingPlace = meetingPlace;
     }
 
+    public boolean rescheduleReservation(long roomId, Instant meetingAt, String meetingPlace) {
+        requireActiveReservation(roomId);
+        if (Objects.equals(this.meetingAt, meetingAt) && Objects.equals(this.meetingPlace, meetingPlace)) {
+            return false;
+        }
+        this.meetingAt = meetingAt;
+        this.meetingPlace = meetingPlace;
+        return true;
+    }
+
     public void cancelReservation(long roomId) {
         requireActiveReservation(roomId);
         changeStatus(PostStatus.FOR_SALE);

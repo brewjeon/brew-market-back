@@ -167,6 +167,18 @@ class PostUpdateTest {
         assertEquals(null, inquiries.reservation(loser, seller.getId()).meetingPlace());
         assertEquals(null, PostDetailResponse.from(reserved, buyers.getFirst().getId()).reservationRoomId());
 
+        long beforeReschedule = inquiries.reservation(winner, seller.getId()).version();
+        mockMvc.perform(reservationChange(loser, seller.getId(), "RESCHEDULE", beforeReschedule))
+                .andExpect(status().isConflict());
+        mockMvc.perform(reservationChange(winner, seller.getId(), "RESCHEDULE", beforeReschedule))
+                .andExpect(status().isNoContent());
+        long winningBuyer = winner == first ? buyers.getFirst().getId() : buyers.getLast().getId();
+        var changed = inquiries.reservation(winner, winningBuyer);
+        assertEquals(InquiryService.ReservationState.RESERVED_HERE, changed.state());
+        assertEquals("성수역 3번 출구", changed.meetingPlace());
+        mockMvc.perform(reservationChange(winner, seller.getId(), "RESCHEDULE", beforeReschedule))
+                .andExpect(status().isConflict());
+
         mockMvc.perform(delete("/posts/{id}", original.getId())
                         .with(oidcLogin().oidcUser(authenticatedUser(seller.getId())))
                         .with(csrf()))
@@ -204,11 +216,13 @@ class PostUpdateTest {
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder reservationChange(
             long roomId, long userId, String action, long version) {
-        String body = "CONFIRM".equals(action)
-                ? """
-                  {"action":"CONFIRM","version":%d,"meetingAt":"%s","meetingPlace":" 성수역 2번 출구 "}
-                  """.formatted(version, Instant.now().plus(1, ChronoUnit.DAYS))
-                : "{\"action\":\"%s\",\"version\":%d}".formatted(action, version);
+        String body = switch (action) {
+            case "CONFIRM", "RESCHEDULE" -> """
+                    {"action":"%s","version":%d,"meetingAt":"%s","meetingPlace":" 성수역 %d번 출구 "}
+                    """.formatted(action, version, Instant.now().plus(1, ChronoUnit.DAYS),
+                    "RESCHEDULE".equals(action) ? 3 : 2);
+            default -> "{\"action\":\"%s\",\"version\":%d}".formatted(action, version);
+        };
         return patch("/inquiries/{id}/reservation", roomId)
                 .with(oidcLogin().oidcUser(authenticatedUser(userId)))
                 .with(csrf())
