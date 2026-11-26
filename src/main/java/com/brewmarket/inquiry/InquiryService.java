@@ -4,6 +4,7 @@ import com.brewmarket.post.Post;
 import com.brewmarket.post.PostRepository;
 import com.brewmarket.post.PostReservationConflictException;
 import com.brewmarket.post.PostStatus;
+import java.time.Instant;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Objects;
@@ -16,6 +17,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class InquiryService {
+    private static final int MAX_MEETING_PLACE_LENGTH = 200;
+    private static final Instant MAX_MEETING_AT = Instant.parse("9999-12-31T23:59:59Z");
+
     private final PostRepository postRepository;
     private final InquiryRoomRepository roomRepository;
     private final InquiryMessageRepository messageRepository;
@@ -42,19 +46,20 @@ public class InquiryService {
     public record RoomPage(List<Room> rooms, Long nextBefore, long unreadRoomCount) {}
     public enum ReservationState { AVAILABLE, RESERVED_HERE, RESERVED_ELSEWHERE, LEGACY_RESERVED, COMPLETED_HERE, COMPLETED, UNAVAILABLE }
     public enum ReservationAction { CONFIRM, CANCEL, COMPLETE }
-    public record Reservation(ReservationState state, Long version) {}
+    public record Reservation(ReservationState state, Long version, Instant meetingAt, String meetingPlace) {}
 
     @Transactional(readOnly = true)
     public Reservation reservation(long roomId, long userId) {
         InquiryRoom room = requireParticipant(roomId, userId, false);
-        if (room.postId == null) return new Reservation(ReservationState.UNAVAILABLE, null);
+        if (room.postId == null) return new Reservation(ReservationState.UNAVAILABLE, null, null, null);
         return postRepository.findByIdAndDeletedAtIsNull(room.postId)
                 .map(post -> toReservation(post, room, userId))
-                .orElseGet(() -> new Reservation(ReservationState.UNAVAILABLE, null));
+                .orElseGet(() -> new Reservation(ReservationState.UNAVAILABLE, null, null, null));
     }
 
     @Transactional
-    public void changeReservation(long roomId, long userId, ReservationAction action, long version) {
+    public void changeReservation(long roomId, long userId, ReservationAction action, long version,
+                                  Instant meetingAt, String meetingPlace) {
         InquiryRoom room = requireParticipant(roomId, userId, false);
         if (room.sellerId != userId) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "판매자만 예약을 변경할 수 있습니다.");
@@ -70,7 +75,16 @@ public class InquiryService {
             throw new PostReservationConflictException("게시글 상태가 변경되었습니다. 확인한 뒤 다시 시도해 주세요.");
         }
         switch (action) {
-            case CONFIRM -> post.reserveFor(roomId);
+            case CONFIRM -> {
+                if (meetingAt == null || !meetingAt.isAfter(Instant.now()) || meetingAt.isAfter(MAX_MEETING_AT)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "현재보다 늦은 약속 시간을 입력해 주세요.");
+                }
+                String place = meetingPlace == null ? "" : meetingPlace.strip();
+                if (place.isEmpty() || place.length() > MAX_MEETING_PLACE_LENGTH) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "만날 장소를 200자 이내로 입력해 주세요.");
+                }
+                post.reserveFor(roomId, meetingAt, place);
+            }
             case CANCEL -> post.cancelReservation(roomId);
             case COMPLETE -> post.completeReservation(roomId);
         }
@@ -88,7 +102,9 @@ public class InquiryService {
         } else {
             state = post.hasSelectedReservation() ? ReservationState.RESERVED_ELSEWHERE : ReservationState.LEGACY_RESERVED;
         }
-        return new Reservation(state, post.getSellerId() == userId ? post.getVersion() : null);
+        boolean showMeeting = state == ReservationState.RESERVED_HERE;
+        return new Reservation(state, post.getSellerId() == userId ? post.getVersion() : null,
+                showMeeting ? post.getMeetingAt() : null, showMeeting ? post.getMeetingPlace() : null);
     }
 
     @Transactional

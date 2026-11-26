@@ -60,6 +60,12 @@ public class Post {
     @Column(name = "reservation_room_id")
     private Long reservationRoomId;
 
+    @Column(name = "meeting_at")
+    private Instant meetingAt;
+
+    @Column(name = "meeting_place", length = 200)
+    private String meetingPlace;
+
     @Column(name = "image_key", length = 100)
     private String imageKey;
 
@@ -79,6 +85,10 @@ public class Post {
         if (status == nextStatus) return;
         if (status == PostStatus.COMPLETED) throw new PostStatusConflictException();
         status = nextStatus;
+        if (nextStatus != PostStatus.RESERVED) {
+            meetingAt = null;
+            meetingPlace = null;
+        }
     }
 
     public Long getVersion() {
@@ -97,12 +107,22 @@ public class Post {
         return Objects.equals(reservationRoomId, roomId);
     }
 
-    public void reserveFor(long roomId) {
+    public Instant getMeetingAt() {
+        return meetingAt;
+    }
+
+    public String getMeetingPlace() {
+        return meetingPlace;
+    }
+
+    public void reserveFor(long roomId, Instant meetingAt, String meetingPlace) {
         if (status != PostStatus.FOR_SALE) {
             throw new PostReservationConflictException("판매 중인 글만 예약할 수 있습니다.");
         }
         changeStatus(PostStatus.RESERVED);
         reservationRoomId = roomId;
+        this.meetingAt = meetingAt;
+        this.meetingPlace = meetingPlace;
     }
 
     public void cancelReservation(long roomId) {
