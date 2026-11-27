@@ -42,10 +42,21 @@ public class InquiryService {
 
     public record Room(long id, Long postId, String title, String lastMessage,
                        long lastMessageId, boolean unread, long unreadCount, boolean reservationConfirmed) {}
-    public record Message(long id, long senderId, String content) {}
+    public record Message(long id, long senderId, String content, InquiryMessage.Kind kind) {}
     public record RoomPage(List<Room> rooms, Long nextBefore, long unreadRoomCount) {}
     public enum ReservationState { AVAILABLE, RESERVED_HERE, RESERVED_ELSEWHERE, LEGACY_RESERVED, COMPLETED_HERE, COMPLETED, UNAVAILABLE }
-    public enum ReservationAction { CONFIRM, RESCHEDULE, CANCEL, COMPLETE }
+    public enum ReservationAction {
+        CONFIRM("판매자가 예약을 확정했습니다."),
+        RESCHEDULE("판매자가 약속 시간 또는 장소를 변경했습니다."),
+        CANCEL("판매자가 예약을 취소했습니다."),
+        COMPLETE("판매자가 거래를 완료했습니다.");
+
+        private final String historyMessage;
+
+        ReservationAction(String historyMessage) {
+            this.historyMessage = historyMessage;
+        }
+    }
     public record Reservation(ReservationState state, Long version, Instant meetingAt, String meetingPlace) {}
 
     @Transactional(readOnly = true)
@@ -61,31 +72,49 @@ public class InquiryService {
     public void changeReservation(long roomId, long userId, ReservationAction action, long version,
                                   Instant meetingAt, String meetingPlace) {
         InquiryRoom room = requireParticipant(roomId, userId, false);
+
         if (room.sellerId != userId) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "판매자만 예약을 변경할 수 있습니다.");
         }
-        if (room.postId == null) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        if (room.postId == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+        }
 
         // 서로 다른 대화에서 들어온 요청도 동일한 게시글 행에서 순서를 결정한다.
         Post post = postRepository.findByIdForUpdate(room.postId)
                 .filter(active -> active.getDeletedAt() == null)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
-        if (post.getSellerId() != userId) throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+
+        if (post.getSellerId() != userId) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
         if (!Objects.equals(post.getVersion(), version)) {
             throw new PostReservationConflictException("게시글 상태가 변경되었습니다. 확인한 뒤 다시 시도해 주세요.");
         }
+
         switch (action) {
             case CONFIRM -> post.reserveFor(roomId, meetingAt, validateMeetingDetails(meetingAt, meetingPlace));
             case RESCHEDULE -> {
-                if (post.rescheduleReservation(roomId, meetingAt, validateMeetingDetails(meetingAt, meetingPlace))) {
-                    events.publishEvent(new InquiryUpdates.MeetingChanged(roomId));
+                String place = validateMeetingDetails(meetingAt, meetingPlace);
+                if (!post.rescheduleReservation(roomId, meetingAt, place)) {
+                    return;
                 }
-                return;
             }
             case CANCEL -> post.cancelReservation(roomId);
             case COMPLETE -> post.completeReservation(roomId);
         }
-        updates.publishReservationChange(room.postId);
+
+        // 일반 메시지와 같은 방 잠금으로 메시지 번호와 읽음 위치의 순서를 유지한다.
+        InquiryRoom lockedRoom = requireParticipant(roomId, userId, true);
+        messageRepository.save(
+                new InquiryMessage(lockedRoom, userId, action.historyMessage, InquiryMessage.Kind.SYSTEM)
+        );
+
+        if (action == ReservationAction.RESCHEDULE) {
+            publishRoomChanged(lockedRoom);
+        } else {
+            updates.publishReservationChange(room.postId);
+        }
     }
 
     private String validateMeetingDetails(Instant meetingAt, String meetingPlace) {

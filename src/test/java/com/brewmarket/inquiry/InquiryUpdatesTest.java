@@ -5,6 +5,9 @@ import com.brewmarket.auth.BrewOidcUser;
 import com.brewmarket.post.PostService;
 import com.brewmarket.user.User;
 import com.brewmarket.user.UserRepository;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -152,6 +155,50 @@ class InquiryUpdatesTest {
             sellerUpdates.getRequest().getAsyncContext().complete();
             strangerUpdates.getRequest().getAsyncContext().complete();
         }
+    }
+
+    @Test
+    void reservationHistoryIsUnreadOnlyInTheSelectedRoom() throws Exception {
+        long seller = createUser();
+        long buyer = createUser();
+        long otherBuyer = createUser();
+        long post = posts.create(seller, "머그컵", "판매합니다", 1000L);
+        long room = inquiries.inquire(post, buyer, "머그컵 문의");
+        long otherRoom = inquiries.inquire(post, otherBuyer, "구매 문의");
+        Instant time = Instant.now().truncatedTo(ChronoUnit.SECONDS).plus(1, ChronoUnit.DAYS);
+        Instant newTime = time.plus(1, ChronoUnit.HOURS);
+
+        changeReservation(room, seller, InquiryService.ReservationAction.CONFIRM, time, "역 2번 출구");
+        changeReservation(room, seller, InquiryService.ReservationAction.RESCHEDULE, newTime, "역 3번 출구");
+        changeReservation(room, seller, InquiryService.ReservationAction.RESCHEDULE, newTime, "역 3번 출구");
+        changeReservation(room, seller, InquiryService.ReservationAction.CANCEL, null, null);
+        changeReservation(room, seller, InquiryService.ReservationAction.CONFIRM, newTime, "역 3번 출구");
+        changeReservation(room, seller, InquiryService.ReservationAction.COMPLETE, null, null);
+
+        var history = inquiries.messages(room, buyer);
+        assertEquals(InquiryMessage.Kind.TEXT, history.getFirst().kind());
+        assertEquals(List.of(
+                "판매자가 예약을 확정했습니다.",
+                "판매자가 약속 시간 또는 장소를 변경했습니다.",
+                "판매자가 예약을 취소했습니다.",
+                "판매자가 예약을 확정했습니다.",
+                "판매자가 거래를 완료했습니다."
+        ), history.stream().filter(message -> message.kind() == InquiryMessage.Kind.SYSTEM)
+                .map(InquiryService.Message::content).toList());
+        assertEquals(1, inquiries.messages(otherRoom, otherBuyer).size());
+        assertEquals(0L, inquiries.rooms(otherBuyer, Long.MAX_VALUE, true).unreadRoomCount());
+
+        var unread = inquiries.rooms(buyer, Long.MAX_VALUE, true);
+        assertEquals(1L, unread.unreadRoomCount());
+        assertEquals(5L, unread.rooms().getFirst().unreadCount());
+        inquiries.markRead(room, buyer, history.getLast().id());
+        assertEquals(0L, inquiries.rooms(buyer, Long.MAX_VALUE, true).unreadRoomCount());
+    }
+
+    private void changeReservation(long room, long seller, InquiryService.ReservationAction action,
+                                   Instant time, String place) {
+        long version = inquiries.reservation(room, seller).version();
+        inquiries.changeReservation(room, seller, action, version, time, place);
     }
 
     private org.springframework.test.web.servlet.MvcResult subscribeToList(long userId) throws Exception {
