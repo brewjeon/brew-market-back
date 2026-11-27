@@ -16,6 +16,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @RequiredArgsConstructor
 public class InquiryUpdates {
     record RoomChanged(long roomId, long buyerId, long sellerId) {}
+    record MeetingChanged(long roomId) {}
     private record ReservationChanged(long postId, List<RoomChanged> rooms) {}
     private enum ChannelType { ROOM, ROOM_LIST, POST }
     private record Channel(long id, ChannelType type) {}
@@ -65,6 +66,11 @@ public class InquiryUpdates {
         notifyChannel(new Channel(change.roomId(), ChannelType.ROOM));
         notifyChannel(new Channel(change.buyerId(), ChannelType.ROOM_LIST));
         notifyChannel(new Channel(change.sellerId(), ChannelType.ROOM_LIST));
+    }
+
+    @TransactionalEventListener
+    public void meetingChanged(MeetingChanged change) {
+        notifyChannel(new Channel(change.roomId(), ChannelType.ROOM));
     }
 
     @TransactionalEventListener
